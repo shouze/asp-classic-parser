@@ -6,6 +6,7 @@ use std::process;
 mod file_utils;
 mod output_format;
 mod parser;
+mod updater;
 
 use output_format::{
     OutputConfig, OutputFormat, format_error, format_success, format_summary, map_severity,
@@ -279,10 +280,38 @@ fn parse_stdin_content(
 }
 
 fn main() {
-    let matches = Command::new("ASP Classic Parser")
+    let app = Command::new("ASP Classic Parser")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Sébastien Houzé")
         .about("Parse and analyze ASP Classic files")
+        .subcommand_required(false)
+        .subcommand(
+            Command::new("upgrade")
+                .about("Upgrade to the latest version (or a specific version)")
+                .arg(
+                    Arg::new("version")
+                        .short('v')
+                        .long("version")
+                        .value_name("VERSION")
+                        .help("Specific version to upgrade to (e.g. '0.1.9')")
+                        .required(false),
+                )
+                .arg(
+                    Arg::new("verbose")
+                        .long("verbose")
+                        .help("Show detailed output during upgrade")
+                        .action(ArgAction::SetTrue)
+                        .required(false),
+                )
+                .arg(
+                    Arg::new("force")
+                        .long("force")
+                        .short('f')
+                        .help("Force downgrade to an older version")
+                        .action(ArgAction::SetTrue)
+                        .required(false),
+                ),
+        )
         .arg(
             Arg::new("files")
                 .help("Files or directories to parse (use '-' for stdin file list)")
@@ -362,8 +391,28 @@ fn main() {
                 .value_delimiter(',')
                 .action(ArgAction::Append)
                 .required(false),
-        )
-        .get_matches();
+        );
+
+    let matches = app.get_matches();
+
+    // Handle upgrade subcommand
+    if let Some(upgrade_matches) = matches.subcommand_matches("upgrade") {
+        let verbose = upgrade_matches.get_flag("verbose");
+        let version = upgrade_matches
+            .get_one::<String>("version")
+            .map(|s| s.as_str());
+        let force = upgrade_matches.get_flag("force");
+
+        match updater::self_update(version, verbose, force) {
+            Ok(()) => {
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("Error during upgrade: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
 
     // Determine the output format
     let format = match matches.get_one::<String>("format") {
@@ -446,9 +495,14 @@ fn main() {
 
     // If no inputs were provided, show usage information
     if paths_to_parse.is_empty() && !matches.get_flag("stdin") {
-        eprintln!("Error: No input files or directories specified.");
-        eprintln!("Usage: asp-classic-parser [FILES/DIRECTORIES...] or - (for stdin)");
-        process::exit(1);
+        // Only show error if we're not in a subcommand context
+        if matches.subcommand_name().is_none() {
+            eprintln!("Error: No input files or directories specified.");
+            eprintln!("Usage: asp-classic-parser [FILES/DIRECTORIES...] or - (for stdin)");
+            eprintln!("       asp-classic-parser --stdin");
+            eprintln!("       asp-classic-parser upgrade [--version VERSION]");
+            process::exit(1);
+        }
     }
 
     // Process all specified paths
