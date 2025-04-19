@@ -9,6 +9,7 @@ This parser provides comprehensive coverage of ASP Classic syntax including:
 - Basic syntax elements (ASP tags, comment handling, statement separators)
 - Support for multiple input methods (files, directories, stdin)
 - Recursive processing of directories to find all ASP and VBS files
+- Automatic exclusion of VCS and tooling directories (.git, node_modules, etc.)
 - Support for different encodings, including ISO-8859-1/Latin-1 commonly used in legacy ASP code
 - Detailed error reporting with line numbers and error types
 - Verbose mode for detailed output during parsing
@@ -89,6 +90,21 @@ cat file_list.txt | asp-classic-parser -
 find . -name "*.asp" | asp-classic-parser -
 ```
 
+### Exclusion Options
+
+By default, the parser excludes common VCS and tooling directories (.git, .svn, node_modules, etc.). You can customize this behavior:
+
+```bash
+# Add custom exclusions (in addition to defaults)
+asp-classic-parser --exclude="*.bak,old_code/**" path/to/directory
+
+# Replace default exclusions with your own patterns
+asp-classic-parser --exclude="logs/**,temp/**" --replace-exclude path/to/directory
+
+# Disable all exclusions (including defaults)
+asp-classic-parser --replace-exclude path/to/directory
+```
+
 ### Command Line Options
 
 ```
@@ -99,9 +115,21 @@ Arguments:
 
 Options:
   -v, --verbose           Enable verbose output
+  -e, --exclude=PATTERNS  Comma-separated list of glob patterns to exclude
+      --replace-exclude   Replace default exclusions with provided patterns
   -h, --help              Print help
   -V, --version           Print version
 ```
+
+## Default Exclusions
+
+The following patterns are excluded by default:
+
+- Version control: `.git/**`, `.svn/**`, `.hg/**`, `.bzr/**`
+- IDE and editors: `.idea/**`, `.vscode/**`, `.vs/**`
+- Build artifacts: `node_modules/**`, `vendor/**`, `dist/**`, `build/**`, `target/**`
+- Package managers: `bower_components/**`, `jspm_packages/**`
+- Other common directories: `coverage/**`, `logs/**`, `tmp/**`, `temp/**`
 
 ## Development Status
 

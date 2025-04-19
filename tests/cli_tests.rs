@@ -27,10 +27,11 @@ fn test_cli_file_processing() {
     fs::write(&nested_asp_path, "<% Response.Write \"Nested\" %>")
         .expect("Failed to write nested.asp");
 
-    // Run the CLI with the temp directory and verbose flag
+    // Run the CLI with the temp directory, verbose flag, and explicitly disable exclusions
     let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
         .arg(temp_path.to_str().unwrap())
         .arg("--verbose")
+        .arg("--replace-exclude") // Explicitly disable default exclusions
         .output()
         .expect("Failed to execute CLI");
 

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-04-19
+
+### Added
+- Automatic exclusion of common VCS and tooling directories (.git, .svn, .hg, node_modules, etc.) during file discovery
+- New `--exclude` option that accepts a comma-separated list of glob patterns to exclude files/directories
+- Added `--replace-exclude` option to replace default exclusions instead of extending them
+- Comprehensive unit tests for exclusion logic on different operating systems (Windows, macOS, Linux)
+
 ## [0.1.3] - 2025-04-19
 
 ### Fixed
