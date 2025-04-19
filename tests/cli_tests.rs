@@ -228,3 +228,139 @@ fn test_cli_stdin_input() {
         stderr
     );
 }
+
+// Test for the no-asp-tags warning and related flags (--strict, --ignore-warnings)
+#[test]
+fn test_cli_no_asp_tags() {
+    // Create a temporary directory with test files
+    let temp_dir = tempdir().expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    // Create a sample HTML file with no ASP tags
+    let html_file_path = temp_path.join("no_asp_tags.html");
+    fs::write(
+        &html_file_path,
+        "<html><body><h1>Hello World</h1></body></html>",
+    )
+    .expect("Failed to write no_asp_tags.html");
+
+    // Create a sample ASP file with valid ASP tags
+    let asp_file_path = temp_path.join("valid_tags.asp");
+    fs::write(&asp_file_path, "<% Response.Write \"Hello World\" %>")
+        .expect("Failed to write valid_tags.asp");
+
+    // Test 1: Default behavior - should treat no-asp-tags as a warning
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(html_file_path.to_str().unwrap())
+        .arg("--verbose")
+        .arg("--format=ascii")
+        .output()
+        .expect("Failed to execute CLI");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    println!("Default behavior stderr: {}", stderr);
+    println!("Default behavior stdout: {}", stdout);
+
+    // Should show a warning and exit with code 0 (success)
+    assert!(
+        stderr.contains("warning") && stderr.contains("No ASP tags found"),
+        "Default behavior should show a warning about no ASP tags"
+    );
+    assert_eq!(
+        exit_code, 0,
+        "Default behavior should exit with code 0 (success)"
+    );
+    assert!(stdout.contains("1 skipped"), "Should report 1 file skipped");
+    assert!(
+        stdout.contains("1 files skipped – no ASP tags"),
+        "Should display the summary line about skipped files"
+    );
+
+    // Test 2: With --strict option - should treat no-asp-tags as an error
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(html_file_path.to_str().unwrap())
+        .arg("--verbose")
+        .arg("--format=ascii")
+        .arg("--strict")
+        .output()
+        .expect("Failed to execute CLI");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    println!("Strict mode stderr: {}", stderr);
+
+    // Should show an error and exit with code 1 (failure)
+    assert!(
+        stderr.contains("error") && stderr.contains("No ASP tags found"),
+        "Strict mode should treat no ASP tags as an error"
+    );
+    assert_eq!(exit_code, 1, "Strict mode should exit with code 1 (error)");
+
+    // Test 3: With --ignore-warnings=no-asp-tags - should not show the warning
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(html_file_path.to_str().unwrap())
+        .arg("--verbose")
+        .arg("--format=ascii")
+        .arg("--ignore-warnings=no-asp-tags")
+        .output()
+        .expect("Failed to execute CLI");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("Ignore warnings stdout: {}", stdout);
+    println!("Ignore warnings stderr: {}", stderr);
+
+    // Should not show a warning but still count it as skipped
+    assert!(
+        !stderr.contains("No ASP tags found"),
+        "Should not show warning when it's explicitly ignored"
+    );
+    assert!(
+        stdout.contains("1 skipped"),
+        "Should still report 1 file skipped even when warnings are ignored"
+    );
+
+    // Test 4: Mixed files - one valid and one without ASP tags
+    // Note: For this test, we need to use both files explicitly as arguments since
+    // find_asp_files() only looks for .asp and .vbs extensions automatically
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(asp_file_path.to_str().unwrap()) // Explicitly add the ASP file
+        .arg(html_file_path.to_str().unwrap()) // Explicitly add the HTML file
+        .arg("--verbose")
+        .arg("--format=ascii")
+        .output()
+        .expect("Failed to execute CLI");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("Mixed files stdout: {}", stdout);
+    println!("Mixed files stderr: {}", stderr);
+
+    // Should successfully parse the valid file and skip the one without ASP tags
+    assert!(
+        stdout.contains("Found 2 files to parse") || stdout.contains("Parsing file"),
+        "Should process both files: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("Parsing complete: 1 succeeded, 0 failed, 1 skipped"),
+        "Should report correct counts for mixed files"
+    );
+    assert!(
+        stderr.contains("No ASP tags found"),
+        "Should show warning for the HTML file"
+    );
+    assert!(
+        stdout.contains(&format!(
+            "✓ {} parsed successfully",
+            asp_file_path.display()
+        )),
+        "Should show success for the valid ASP file"
+    );
+}

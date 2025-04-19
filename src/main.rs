@@ -1,4 +1,4 @@
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 use std::process;
@@ -8,6 +8,16 @@ mod output_format;
 mod parser;
 
 use output_format::{OutputFormat, map_severity};
+
+/// Represents the result of parsing a file
+enum ParseResult {
+    /// The file was parsed successfully
+    Success,
+    /// The file had no ASP tags and was skipped
+    Skipped,
+    /// The file had an error during parsing
+    Error,
+}
 
 /// Extract line and column information from a parsing error message
 ///
@@ -55,7 +65,13 @@ fn extract_line_and_column(error_message: &str) -> (usize, usize) {
 }
 
 /// Parse a single file and report results
-fn parse_file(path: &std::path::Path, verbose: bool, format: OutputFormat) -> bool {
+fn parse_file(
+    path: &std::path::Path,
+    verbose: bool,
+    format: OutputFormat,
+    strict_mode: bool,
+    ignored_warnings: &[String],
+) -> ParseResult {
     if verbose {
         println!("Parsing file: {}", path.display());
     }
@@ -66,10 +82,48 @@ fn parse_file(path: &std::path::Path, verbose: bool, format: OutputFormat) -> bo
                 Ok(_) => {
                     // Show success message with the specified format
                     println!("{}", format.format_success(path));
-                    true
+                    ParseResult::Success
                 }
                 Err(e) => {
-                    // Extract line and column from the error using our dedicated helper function
+                    // Try to downcast to AspParseError to check for no-asp-tags condition
+                    if let Some(asp_error) = e.downcast_ref::<parser::AspParseError>() {
+                        // Check if this is a "no ASP tags" error
+                        if asp_error.is_no_asp_tags_error() {
+                            let path_str = path.display().to_string();
+
+                            // In strict mode, treat as error
+                            if strict_mode {
+                                let error_msg = "No ASP tags found in file";
+                                eprintln!(
+                                    "{}",
+                                    format.format_error(&path_str, 1, 1, error_msg, "error")
+                                );
+                                return ParseResult::Error;
+                            }
+
+                            // Otherwise, handle as a warning - unless ignored
+                            if !ignored_warnings.contains(&"no-asp-tags".to_string()) {
+                                // In verbose mode or if not explicitly ignored, show the warning
+                                if verbose || ignored_warnings.is_empty() {
+                                    let warning_msg = "No ASP tags found in file - skipping";
+                                    eprintln!(
+                                        "{}",
+                                        format.format_error(
+                                            &path_str,
+                                            1,
+                                            1,
+                                            warning_msg,
+                                            "warning"
+                                        )
+                                    );
+                                }
+                            }
+
+                            return ParseResult::Skipped;
+                        }
+                    }
+
+                    // For other errors, handle as a regular error
                     let error_message = e.to_string();
                     let (line, column) = extract_line_and_column(&error_message);
 
@@ -82,7 +136,7 @@ fn parse_file(path: &std::path::Path, verbose: bool, format: OutputFormat) -> bo
                         "{}",
                         format.format_error(&path_str, line, column, &error_message, severity)
                     );
-                    false
+                    ParseResult::Error
                 }
             }
         }
@@ -94,7 +148,7 @@ fn parse_file(path: &std::path::Path, verbose: bool, format: OutputFormat) -> bo
                 "{}",
                 format.format_error(&path_str, 1, 1, &error_msg, "error")
             );
-            false
+            ParseResult::Error
         }
     }
 }
@@ -107,7 +161,7 @@ fn main() {
         .arg(
             Arg::new("files")
                 .help("Files or directories to parse (use '-' for stdin)")
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .required(false),
         )
         .arg(
@@ -115,7 +169,7 @@ fn main() {
                 .long("verbose")
                 .short('v')
                 .help("Enable verbose output")
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
                 .required(false),
         )
         .arg(
@@ -135,14 +189,30 @@ fn main() {
                 .help("Comma-separated list of glob patterns to exclude (e.g. '*.tmp,backup/**'). Extends the default exclusions.")
                 .value_name("PATTERNS")
                 .value_delimiter(',')
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .required(false),
         )
         .arg(
             Arg::new("replace-exclude")
                 .long("replace-exclude")
                 .help("Replace default exclusions with provided patterns instead of extending them")
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
+                .required(false),
+        )
+        .arg(
+            Arg::new("strict")
+                .long("strict")
+                .help("Treat warnings as errors (e.g., no-asp-tags becomes an error)")
+                .action(ArgAction::SetTrue)
+                .required(false),
+        )
+        .arg(
+            Arg::new("ignore-warnings")
+                .long("ignore-warnings")
+                .help("Comma-separated list of warnings to ignore (e.g., 'no-asp-tags')")
+                .value_name("WARNINGS")
+                .value_delimiter(',')
+                .action(ArgAction::Append)
                 .required(false),
         )
         .get_matches();
@@ -162,9 +232,23 @@ fn main() {
     };
 
     let mut paths_to_parse: Vec<PathBuf> = Vec::new();
+    let verbose = matches.get_flag("verbose");
+    let strict_mode = matches.get_flag("strict");
+
+    // Get list of warnings to ignore
+    let ignored_warnings: Vec<String> = match matches.get_many::<String>("ignore-warnings") {
+        Some(warnings) => warnings.cloned().collect(),
+        None => Vec::new(),
+    };
+
+    if verbose && !ignored_warnings.is_empty() {
+        println!("Ignoring warnings: {}", ignored_warnings.join(", "));
+    }
+
+    // Counters for success, failures, and skipped files
     let mut success_count = 0;
     let mut fail_count = 0;
-    let verbose = matches.get_flag("verbose");
+    let mut skipped_count = 0;
 
     // Prepare exclusion patterns from arguments
     let mut exclude_patterns: Vec<String> = Vec::new();
@@ -264,34 +348,55 @@ fn main() {
     }
 
     for file_path in files_to_parse {
-        if parse_file(&file_path, verbose, output_format) {
-            success_count += 1;
-        } else {
-            fail_count += 1;
+        match parse_file(
+            &file_path,
+            verbose,
+            output_format,
+            strict_mode,
+            &ignored_warnings,
+        ) {
+            ParseResult::Success => success_count += 1,
+            ParseResult::Skipped => skipped_count += 1,
+            ParseResult::Error => fail_count += 1,
         }
     }
 
-    // Report summary only in verbose mode or if there were failures
-    if verbose || fail_count > 0 {
+    // Report summary
+    // Always show summary if there are skipped files (new in v0.1.6)
+    // or if in verbose mode or if there were failures (existing behavior)
+    if verbose || fail_count > 0 || skipped_count > 0 {
         match output_format {
             OutputFormat::Ascii => {
                 println!(
-                    "Parsing complete: {} succeeded, {} failed",
-                    success_count, fail_count
+                    "Parsing complete: {} succeeded, {} failed, {} skipped",
+                    success_count, fail_count, skipped_count
                 );
+
+                // Show the specific "skipped - no ASP tags" message if any files were skipped
+                if skipped_count > 0 {
+                    println!("{} files skipped – no ASP tags", skipped_count);
+                }
             }
             OutputFormat::Ci => {
                 println!(
                     "::notice::ASP Classic Parser: {} files succeeded, {} files failed",
                     success_count, fail_count
                 );
+
+                if skipped_count > 0 {
+                    println!(
+                        "::notice::ASP Classic Parser: {} files skipped – no ASP tags",
+                        skipped_count
+                    );
+                }
             }
             OutputFormat::Json => {
                 println!(
-                    "{{\"summary\": {{\"total\": {}, \"success\": {}, \"failed\": {}}}}}",
-                    success_count + fail_count,
+                    "{{\"summary\": {{\"total\": {}, \"success\": {}, \"failed\": {}, \"skipped\": {}, \"skipped_reason\": \"no ASP tags\"}}}}",
+                    success_count + fail_count + skipped_count,
                     success_count,
-                    fail_count
+                    fail_count,
+                    skipped_count
                 );
             }
         }
