@@ -311,17 +311,16 @@ fn find_files_simple(
 
         // Process entries in this directory
         if let Ok(entries) = fs::read_dir(&current_dir) {
-            for entry_result in entries {
-                if let Ok(entry) = entry_result {
-                    let path = entry.path();
+            // Use flatten() to simplify handling of Result<DirEntry>
+            for entry in entries.flatten() {
+                let path = entry.path();
 
-                    if path.is_dir() {
-                        // Add to stack for later processing if not excluded
-                        dirs_to_process.push(path);
-                    } else if has_asp_extension(&path) && !should_exclude(&path, exclude_patterns) {
-                        // Add ASP/VBS files that aren't excluded
-                        files.push(path);
-                    }
+                if path.is_dir() {
+                    // Add to stack for later processing if not excluded
+                    dirs_to_process.push(path);
+                } else if has_asp_extension(&path) && !should_exclude(&path, exclude_patterns) {
+                    // Add ASP/VBS files that aren't excluded
+                    files.push(path);
                 }
             }
         }
