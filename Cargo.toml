@@ -1,12 +1,15 @@
 [package]
 name = "asp-classic-parser"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 
 [dependencies]
 pest = "2.5"
 pest_derive = "2.5"
 clap = "4.4"
+
+[dev-dependencies]
+tempfile = "3.8"
 
 [lib]
 name = "asp_classic_parser"
