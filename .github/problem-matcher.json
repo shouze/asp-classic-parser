@@ -1,0 +1,17 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "asp-classic-parser",
+      "pattern": [
+        {
+          "regexp": "^::([^\\s]+)\\sfile=([^,]+),line=(\\d+),col=(\\d+),title=([^:]+)::(.*)",
+          "severity": 1,
+          "file": 2,
+          "line": 3,
+          "column": 4,
+          "message": 6
+        }
+      ]
+    }
+  ]
+}

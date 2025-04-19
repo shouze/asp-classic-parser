@@ -32,6 +32,7 @@ fn test_cli_file_processing() {
         .arg(temp_path.to_str().unwrap())
         .arg("--verbose")
         .arg("--replace-exclude") // Explicitly disable default exclusions
+        .arg("--format=ascii") // Force ASCII format for consistent test results
         .output()
         .expect("Failed to execute CLI");
 
@@ -79,18 +80,20 @@ fn test_cli_non_verbose_output() {
     fs::write(&asp_file_path, "<% Response.Write \"Hello World\" %>")
         .expect("Failed to write quiet.asp");
 
-    // Run the CLI without verbose flag
+    // Run the CLI without verbose flag, but with ASCII format
     let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
         .arg(asp_file_path.to_str().unwrap())
+        .arg("--format=ascii")
         .output()
         .expect("Failed to execute CLI");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    println!("Non-verbose output: {}", stdout);
 
-    // Check that it shows "File parsed successfully" even in non-verbose mode
+    // Check that it shows success message with the correct format
     assert!(
         stdout.contains(&format!(
-            "File parsed successfully: {}",
+            "✓ {} parsed successfully",
             asp_file_path.display()
         )),
         "Should show file parsed successfully message"
@@ -128,18 +131,23 @@ fn test_cli_encoding_fallback() {
     file.write_all(latin1_content)
         .expect("Failed to write Latin-1 file");
 
-    // Run the CLI with the Latin-1 file in verbose mode
+    // Run the CLI with the Latin-1 file in verbose mode and ASCII format
     let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
         .arg(latin1_file_path.to_str().unwrap())
         .arg("--verbose")
+        .arg("--format=ascii")
         .output()
         .expect("Failed to execute CLI");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    println!("Latin-1 test output: {}", stdout);
 
     // Check if the file was successfully parsed despite encoding
     assert!(
-        stdout.contains("File parsed successfully"),
+        stdout.contains(&format!(
+            "✓ {} parsed successfully",
+            latin1_file_path.display()
+        )),
         "Latin-1 file should parse successfully, got: {}",
         stdout
     );
@@ -147,7 +155,7 @@ fn test_cli_encoding_fallback() {
     // Check summary contains correct count
     assert!(
         stdout.contains("Parsing complete: 1 succeeded, 0 failed"),
-        "Latin-1 file should parse successfully, got: {}",
+        "Latin-1 file should parse successfully in summary, got: {}",
         stdout
     );
 }
@@ -165,13 +173,13 @@ fn test_cli_stdin_input() {
         .expect("Failed to write stdin_test.asp");
 
     // Use a cross-platform approach with explicit Stdio handling
-    use std::io::Write;
     use std::process::{Command, Stdio};
 
-    // Create a command with stdin piped
+    // Create a command with stdin piped and force ASCII format for consistent testing
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
         .arg("-") // Indicate stdin input
         .arg("--verbose")
+        .arg("--format=ascii") // Force ASCII format
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped()) // Capture stderr too for better debugging
@@ -211,7 +219,10 @@ fn test_cli_stdin_input() {
 
     // Check if the file was successfully parsed
     assert!(
-        stdout.contains("File parsed successfully"),
+        stdout.contains(&format!(
+            "✓ {} parsed successfully",
+            asp_file_path.display()
+        )),
         "File should parse successfully via stdin, got stdout: {}, stderr: {}",
         stdout,
         stderr

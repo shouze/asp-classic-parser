@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-04-19
+
+### Added
+- Implemented multiple output formats for parsing errors:
+  - ASCII: Human-readable plain text format (default in interactive terminals)
+  - CI: GitHub Actions compatible problem-matcher format with inline annotations
+  - JSON: Machine-readable structured data for tooling integration
+- Added automatic format detection based on environment:
+  - Uses CI format when running in CI environments (CI=true)
+  - Uses CI format when output is not to a terminal (piped output)
+  - Uses ASCII format when in an interactive terminal
+- Added `--format` / `-f` CLI option to explicitly select output format
+- Added comprehensive documentation about severity mappings in code and README
+
+### Changed
+- Restructured error reporting with standardized severity levels:
+  - Error: Critical issues that prevent parsing or render code non-functional
+  - Warning: Potential issues that could cause runtime problems
+  - Notice: Non-critical style or best practice suggestions
+- Updated tests to be compatible with all output formats
+
 ## [0.1.4] - 2025-04-19
 
 ### Added
