@@ -19,7 +19,11 @@ pub struct AspParseError {
 impl fmt::Display for AspParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match (self.line, self.column) {
-            (Some(line), Some(column)) => write!(f, "Parse error at line {}, column {}: {}", line, column, self.message),
+            (Some(line), Some(column)) => write!(
+                f,
+                "Parse error at line {}, column {}: {}",
+                line, column, self.message
+            ),
             (Some(line), None) => write!(f, "Parse error at line {}: {}", line, self.message),
             _ => write!(f, "Parse error: {}", self.message),
         }
@@ -69,7 +73,7 @@ pub fn parse(input: &str) -> Result<(), Box<dyn Error>> {
                 // In future iterations, this will build an AST
                 println!("Successfully parsed ASP file structure");
                 println!("Rule: {:?}", pair.as_rule());
-                
+
                 // Count ASP tags to ensure we have balanced tags
                 for inner_pair in pair.into_inner() {
                     match inner_pair.as_rule() {
@@ -80,7 +84,7 @@ pub fn parse(input: &str) -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            
+
             // For validation purposes, ensure we have at least one ASP tag
             // This helps catch some types of invalid syntax
             if tag_count == 0 {
@@ -90,17 +94,17 @@ pub fn parse(input: &str) -> Result<(), Box<dyn Error>> {
                     column: None,
                 }));
             }
-            
+
             Ok(())
         }
         Err(e) => {
             // Convert Pest error into our custom error with location info
             let message = format!("{}", e);
-            
+
             // Extract line and column from the error message or use None
             // Message format is typically: "--> line:column"
             let (line, column) = extract_position_from_error(&message);
-            
+
             Err(Box::new(AspParseError {
                 message,
                 line,
@@ -116,13 +120,15 @@ fn extract_position_from_error(error_msg: &str) -> (Option<usize>, Option<usize>
     if let Some(pos_index) = error_msg.find("-->") {
         if let Some(line_col) = error_msg[pos_index + 3..].split_whitespace().next() {
             if let Some((line_str, col_str)) = line_col.split_once(':') {
-                if let (Ok(line), Ok(column)) = (line_str.parse::<usize>(), col_str.parse::<usize>()) {
+                if let (Ok(line), Ok(column)) =
+                    (line_str.parse::<usize>(), col_str.parse::<usize>())
+                {
                     return (Some(line), Some(column));
                 }
             }
         }
     }
-    
+
     // Unable to extract position info
     (None, None)
 }
