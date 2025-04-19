@@ -16,28 +16,54 @@ single_line_comment = _{ ("'" | "REM ") ~ (!("\n") ~ ANY)* }
 asp_open_tag = { "<%" }             // Standard opening ASP tag
 asp_close_tag = { "%>" }            // Standard closing ASP tag
 asp_open_equal = { "<%=" }          // Opening tag for ASP expressions (output)
-asp_script_block = { asp_open_tag ~ inner_content ~ asp_close_tag }  // Complete ASP code block
-asp_expression_block = { asp_open_equal ~ expression ~ asp_close_tag }  // ASP expression block (<%=...%>)
-
-// Inner ASP content (code between ASP tags)
-inner_content = { (!(asp_close_tag) ~ ANY)* }
 
 // Line continuation - VBScript allows line continuation with underscore
 line_continuation = _{ "_" ~ WHITESPACE* ~ "\r"? ~ "\n" }
 
 // String literal with proper quote matching
-string_literal = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+string_literal = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" | "'" ~ (!("'") ~ ANY)* ~ "'" }
+
+// Variable reference
+variable = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Operators
+operator = { "+" | "-" | "*" | "/" | "\\" | "^" | "&" | "=" | "<>" | "<" | ">" | "<=" | ">=" }
+
+// Expression terms (primary elements of expressions)
+term = { 
+    string_literal | 
+    variable |
+    "(" ~ expression ~ ")" 
+}
+
+// Expressions (simplified for now, will be expanded in future stages)
+expression = { 
+    term ~ (operator ~ term)* | 
+    (!(asp_close_tag | statement_separator) ~ ANY)+ 
+}
 
 // Basic statements
-statement = { response_write | other_statement }
-response_write = { "Response.Write" ~ WHITESPACE+ ~ expression }  // Common ASP output method
-other_statement = { (!("Response.Write") ~ !("\n") ~ ANY)+ }
+statement = { 
+    response_write | 
+    var_declaration |
+    assignment |
+    other_statement
+}
+response_write = { "Response.Write" ~ WHITESPACE* ~ expression }  // Common ASP output method
+var_declaration = { ("var" | "dim") ~ WHITESPACE+ ~ variable ~ (WHITESPACE* ~ "=" ~ WHITESPACE* ~ expression)? }
+assignment = { variable ~ WHITESPACE* ~ "=" ~ WHITESPACE* ~ expression }
+other_statement = { (!(asp_close_tag | statement_separator) ~ ANY)+ }
 
 // Statement separator - allows multiple statements on one line
 statement_separator = { ":" }
 
-// Expressions (simplified for now, will be expanded in future stages)
-expression = { string_literal | (!(asp_close_tag | statement_separator | string_literal) ~ ANY)+ }
+// ASP blocks
+asp_script_block = ${ asp_open_tag ~ inner_asp_content ~ asp_close_tag }  // Complete ASP code block
+asp_expression_block = ${ asp_open_equal ~ expression ~ asp_close_tag }  // ASP expression block (<%=...%>)
+inner_asp_content = @{ (!(asp_close_tag) ~ ANY)* }
+
+// HTML content between ASP blocks or at the beginning/end of the file
+html_content = @{ (!(asp_open_tag | asp_open_equal) ~ ANY)+ }
 
 // ASP file entry rule - The main rule that matches a complete ASP file
-file = { SOI ~ (asp_script_block | asp_expression_block | (!asp_open_tag ~ ANY))* ~ EOI }
+file = { SOI ~ (asp_script_block | asp_expression_block | html_content)* ~ EOI }
