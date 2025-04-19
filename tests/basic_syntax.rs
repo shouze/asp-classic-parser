@@ -45,7 +45,8 @@ fn test_invalid_syntax_parsing() {
     let fixture_path = Path::new("fixtures/failing/invalid_syntax.asp");
 
     // Read the test file
-    let content = fs::read_to_string(fixture_path).expect("Failed to read invalid test fixture file");
+    let content =
+        fs::read_to_string(fixture_path).expect("Failed to read invalid test fixture file");
 
     // Parse the content
     let result = parser::parse(&content);
