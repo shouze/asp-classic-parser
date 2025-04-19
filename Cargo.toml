@@ -1,0 +1,17 @@
+[package]
+name = "asp-classic-parser"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pest = "2.5"
+pest_derive = "2.5"
+clap = "4.4"
+
+[lib]
+name = "asp_classic_parser"
+path = "src/lib.rs"
+
+[[bin]]
+name = "asp-classic-parser"
+path = "src/main.rs"
