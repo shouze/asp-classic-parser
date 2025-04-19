@@ -90,15 +90,47 @@ jobs:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
 
-    - name: Install cross-compilation tools (Linux)
-      if: matrix.os == 'ubuntu-latest' && matrix.target != 'x86_64-unknown-linux-gnu'
+    - name: Setup cross-compilation for Linux targets
+      if: matrix.os == 'ubuntu-latest'
       run: |
-        # Install cross
-        cargo install cross --locked
+        # Install needed cross-compilation tools
+        sudo apt-get update
+        
+        # For all Linux targets - use vendored OpenSSL
+        echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+        echo "OPENSSL_DIR=/usr/local/opt/openssl" >> $GITHUB_ENV
+        # Activer les features vendored
+        echo "CARGO_FEATURES=--features vendored-openssl" >> $GITHUB_ENV
+        
+        # Install specific dependencies for different targets
+        if [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
+          sudo apt-get install -y gcc-multilib
+        elif [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+        elif [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
+          sudo apt-get install -y musl-tools
+        fi
+        
+        # For non-musl targets, use cross with OPENSSL env vars
+        if [[ "${{ matrix.target }}" != "x86_64-unknown-linux-musl" ]]; then
+          cargo install cross --locked
+          echo "CARGO=cross" >> $GITHUB_ENV
+          # Create a Cross.toml file for custom configuration
+          cat > Cross.toml << EOF
+          [build.env]
+          passthrough = [
+            "RUST_BACKTRACE",
+            "OPENSSL_STATIC",
+            "OPENSSL_DIR"
+          ]
 
-        # Set cross as the cargo command
-        echo "CARGO=cross" >> $GITHUB_ENV
-        echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
+          [target.aarch64-unknown-linux-gnu]
+          image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
+
+          [target.i686-unknown-linux-gnu]
+          image = "ghcr.io/cross-rs/i686-unknown-linux-gnu:main"
+          EOF
+        fi
 
     - name: Set target flags
       if: matrix.target != ''
@@ -117,7 +149,7 @@ jobs:
     - name: Build release binary
       shell: bash
       run: |
-        ${{ env.CARGO }} build --release ${{ env.TARGET_FLAGS }}
+        ${{ env.CARGO }} build --release ${{ env.TARGET_FLAGS }} ${{ env.CARGO_FEATURES }}
 
     - name: Determine binary path and archive name
       shell: bash

@@ -18,6 +18,13 @@ flate2 = "1.0"
 tar = "0.4"
 thiserror = "1.0"
 tempfile = "3.8"  # Added tempfile for temporary directory support
+openssl-sys = { version = "0.9", features = ["vendored"], optional = true }
+
+[features]
+# Enable the vendored feature by default for easier cross-compilation
+default = ["vendored"]
+vendored = ["openssl-sys/vendored", "reqwest/native-tls-vendored"]
+vendored-openssl = ["reqwest/native-tls-vendored"]
 
 # For TTY detection
 [target.'cfg(unix)'.dependencies]
