@@ -15,6 +15,7 @@ This parser provides comprehensive coverage of ASP Classic syntax including:
 - Colorized output with distinctive symbols for different message types
 - Verbose mode for detailed output during parsing
 - Multiple output formats for integration with CI systems or machine processing
+- Self-update capability to easily upgrade to the latest version
 
 ## Installation
 
@@ -61,6 +62,28 @@ The binary will be available at `target/release/asp-classic-parser`.
 ## Usage
 
 ASP Classic Parser offers several ways to process your ASP Classic and VBScript files:
+
+### Upgrade to Latest Version
+
+The parser can self-update to the latest released version or a specific version:
+
+```bash
+# Upgrade to the latest version
+asp-classic-parser upgrade
+
+# Upgrade with verbose output
+asp-classic-parser upgrade --verbose
+
+# Upgrade to a specific version
+asp-classic-parser upgrade --version 0.1.9
+```
+
+Notes about the upgrade command:
+- If you're already on the latest version, the command will exit without changes
+- Attempting to downgrade will show a warning message and cancel the operation
+- The parser will automatically determine the correct binary for your platform
+- Downloads are verified with SHA-256 checksums when available
+- After a successful upgrade, you need to restart the application
 
 ### Process Individual Files
 

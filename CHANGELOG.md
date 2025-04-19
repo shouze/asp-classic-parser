@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2025-04-19
+
+### Added
+- New `upgrade` command to self-update the parser to the latest version
+- Support for specifying a target version with `upgrade --version VERSION`
+- Automatic platform detection for downloading the appropriate binary
+- Checksum verification of downloaded packages
+- Downgrade protection with warning when attempting to install an older version
+- Detailed progress information during the upgrade process with `--verbose` flag
+
+### Changed
+- Restructured CLI to support subcommands while maintaining backward compatibility
+- Enhanced error handling for network and file system operations
+- Improved platform detection for cross-platform compatibility
+
 ## [0.1.9] - 2025-04-19
 
 ### Added

@@ -21,16 +21,19 @@
 - Add --stdin to parse code received from standard input, returning diagnostics on standard output in the chosen --format.
 
 # 0.1.10
-- Support --config path.toml so project‑wide default options can be stored and overridden hierarchically.
+- Add an upgrade command to self update from the latest release (or a specified one). Should work the same than install.sh, but directly integrated into the binary. A warning message will be displayed in case we downgrade to a former release.
 
 # 0.1.11
-- Implement an incremental parsing cache keyed by file hash and CLI options to accelerate repeated runs; invalidate entries on file change. Add a --no-cache option to run by bypassing the cache.
+- Support --config path.toml so project‑wide default options can be stored and overridden hierarchically.
 
 # 0.1.12
-- Expose --threads N (default: logical CPU count) for parallel file processing.
+- Implement an incremental parsing cache keyed by file hash and CLI options to accelerate repeated runs; invalidate entries on file change. Add a --no-cache option to run by bypassing the cache.
 
 # 0.1.13
-- Ship a Language Server Protocol (LSP) server that uses the parser for real‑time diagnostics in editors (VS Code, Neovim, etc.).
+- Expose --threads N (default: logical CPU count) for parallel file processing.
 
 # 0.1.14
+- Ship a Language Server Protocol (LSP) server that uses the parser for real‑time diagnostics in editors (VS Code, Neovim, etc.).
+
+# 0.1.15
 - Extend the release workflow to publish signed, SBOM‑attached binaries for all targets listed in the GitHub Actions matrix.
