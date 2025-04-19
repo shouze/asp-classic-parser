@@ -11,17 +11,26 @@
 - Print a summary line such as 3 files skipped – no ASP tags at the end of the run.
 
 # 0.1.7
-- Treat a trailing </html> followed by any combination of CR, LF or CRLF as valid; do not raise a fatal error.
-- Add regression tests covering Windows‑style CRLF endings and mixed newline scenarios.
+- Fix mixed ASP/HTML content edge cases
 
 # 0.1.8
-- Add --stdin to parse code received from standard input, returning diagnostics on standard output in the chosen --format.
-- Support --config path.toml so project‑wide default options can be stored and overridden hierarchically.
+- Improve ascii output format by using ✓ (check mark) in case of successfully parsed file, with color \x1b[32m, ✖ (heavy multiplication X) in case of error with color \x1b[31m and  ⚠ (warning sign) with color \x1b[33m) in case of warning. Detect if colors can be used into the terminal and also provide an option to force not using colors.
+- Also add an option to not display successfully parsed files, only ones in error and skipped
 
 # 0.1.9
-- Implement an incremental parsing cache keyed by file hash and CLI options to accelerate repeated runs; invalidate entries on file change.
-- Expose --threads N (default: logical CPU count) for parallel file processing.
+- Add --stdin to parse code received from standard input, returning diagnostics on standard output in the chosen --format.
 
 # 0.1.10
+- Support --config path.toml so project‑wide default options can be stored and overridden hierarchically.
+
+# 0.1.11
+- Implement an incremental parsing cache keyed by file hash and CLI options to accelerate repeated runs; invalidate entries on file change. Add a --no-cache option to run by bypassing the cache.
+
+# 0.1.12
+- Expose --threads N (default: logical CPU count) for parallel file processing.
+
+# 0.1.13
 - Ship a Language Server Protocol (LSP) server that uses the parser for real‑time diagnostics in editors (VS Code, Neovim, etc.).
+
+# 0.1.14
 - Extend the release workflow to publish signed, SBOM‑attached binaries for all targets listed in the GitHub Actions matrix.
