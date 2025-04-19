@@ -92,6 +92,19 @@ cat file_list.txt | asp-classic-parser -
 find . -name "*.asp" | asp-classic-parser -
 ```
 
+### Parse ASP Code Directly from Standard Input
+
+```bash
+# Parse ASP code provided directly through stdin
+echo "<% Response.Write \"Hello World\" %>" | asp-classic-parser --stdin
+
+# Pipe code from a file to be parsed (without reading it as a filename)
+cat code_snippet.asp | asp-classic-parser --stdin
+
+# Use with formatting options
+cat code_snippet.asp | asp-classic-parser --stdin --format=json
+```
+
 ### Exclusion Options
 
 By default, the parser excludes common VCS and tooling directories (.git, .svn, node_modules, etc.). You can customize this behavior:
@@ -173,10 +186,11 @@ The parser maps different types of issues to three severity levels:
 Usage: asp-classic-parser [OPTIONS] [FILES/DIRECTORIES...]
 
 Arguments:
-  [FILES/DIRECTORIES...]  Files or directories to parse (use '-' for stdin)
+  [FILES/DIRECTORIES...]  Files or directories to parse (use '-' for stdin file list)
 
 Options:
   -v, --verbose             Enable verbose output
+  -s, --stdin               Parse ASP code received from standard input
   -f, --format=FORMAT       Output format: ascii (default), ci, json, or auto
       --no-color            Disable colored output in terminal
       --quiet-success       Don't show messages for successfully parsed files

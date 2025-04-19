@@ -1,5 +1,5 @@
 use clap::{Arg, ArgAction, Command};
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Read};
 use std::path::PathBuf;
 use std::process;
 
@@ -172,6 +172,112 @@ fn parse_file(
     }
 }
 
+/// Parse code content directly from standard input
+fn parse_stdin_content(
+    verbose: bool,
+    output_config: &OutputConfig,
+    strict_mode: bool,
+    ignored_warnings: &[String],
+) -> ParseResult {
+    if verbose {
+        println!("Reading ASP code from standard input...");
+    }
+
+    // Read all content from stdin
+    let mut content = String::new();
+    match io::stdin().read_to_string(&mut content) {
+        Ok(_) => {
+            if verbose {
+                println!("Received {} bytes from stdin", content.len());
+            }
+
+            // Use a pseudo-filename for better error reporting
+            let path_str = "<stdin>";
+
+            match parser::parse(&content, verbose) {
+                Ok(_) => {
+                    // Show success message if configured to do so
+                    if output_config.show_success {
+                        println!(
+                            "{}",
+                            format_success(output_config, &PathBuf::from(path_str))
+                        );
+                    }
+                    ParseResult::Success
+                }
+                Err(e) => {
+                    // Try to downcast to AspParseError to check for no-asp-tags condition
+                    if let Some(asp_error) = e.downcast_ref::<parser::AspParseError>() {
+                        // Check if this is a "no ASP tags" error
+                        if asp_error.is_no_asp_tags_error() {
+                            // In strict mode, treat as error
+                            if strict_mode {
+                                let error_msg = "No ASP tags found in input";
+                                eprintln!(
+                                    "{}",
+                                    format_error(output_config, path_str, 1, 1, error_msg, "error")
+                                );
+                                return ParseResult::Error;
+                            }
+
+                            // Otherwise, handle as a warning - unless ignored
+                            if !ignored_warnings.contains(&"no-asp-tags".to_string()) {
+                                // In verbose mode or if not explicitly ignored, show the warning
+                                if verbose || ignored_warnings.is_empty() {
+                                    let warning_msg = "No ASP tags found in input - skipping";
+                                    eprintln!(
+                                        "{}",
+                                        format_error(
+                                            output_config,
+                                            path_str,
+                                            1,
+                                            1,
+                                            warning_msg,
+                                            "warning"
+                                        )
+                                    );
+                                }
+                            }
+
+                            return ParseResult::Skipped;
+                        }
+                    }
+
+                    // For other errors, handle as a regular error
+                    let error_message = e.to_string();
+                    let (line, column) = extract_line_and_column(&error_message);
+
+                    // Get the appropriate severity for this error
+                    let severity = map_severity("parse_error");
+
+                    // Format and print the error according to the selected output format
+                    eprintln!(
+                        "{}",
+                        format_error(
+                            output_config,
+                            path_str,
+                            line,
+                            column,
+                            &error_message,
+                            severity
+                        )
+                    );
+                    ParseResult::Error
+                }
+            }
+        }
+        Err(e) => {
+            // Format stdin reading errors using the same format
+            let error_msg = format!("Cannot read from stdin: {}", e);
+            eprintln!(
+                "{}",
+                format_error(output_config, "<stdin>", 1, 1, &error_msg, "error")
+            );
+            ParseResult::Error
+        }
+    }
+}
+
 fn main() {
     let matches = Command::new("ASP Classic Parser")
         .version(env!("CARGO_PKG_VERSION"))
@@ -179,9 +285,18 @@ fn main() {
         .about("Parse and analyze ASP Classic files")
         .arg(
             Arg::new("files")
-                .help("Files or directories to parse (use '-' for stdin)")
+                .help("Files or directories to parse (use '-' for stdin file list)")
                 .action(ArgAction::Append)
                 .required(false),
+        )
+        .arg(
+            Arg::new("stdin")
+                .long("stdin")
+                .short('s')
+                .help("Parse ASP code from standard input")
+                .action(ArgAction::SetTrue)
+                .required(false)
+                .conflicts_with("files"),
         )
         .arg(
             Arg::new("verbose")
@@ -330,7 +445,7 @@ fn main() {
     }
 
     // If no inputs were provided, show usage information
-    if paths_to_parse.is_empty() {
+    if paths_to_parse.is_empty() && !matches.get_flag("stdin") {
         eprintln!("Error: No input files or directories specified.");
         eprintln!("Usage: asp-classic-parser [FILES/DIRECTORIES...] or - (for stdin)");
         process::exit(1);
@@ -389,17 +504,25 @@ fn main() {
         println!("Found {} files to parse", files_to_parse.len());
     }
 
-    for file_path in files_to_parse {
-        match parse_file(
-            &file_path,
-            verbose,
-            &output_config,
-            strict_mode,
-            &ignored_warnings,
-        ) {
+    if matches.get_flag("stdin") {
+        match parse_stdin_content(verbose, &output_config, strict_mode, &ignored_warnings) {
             ParseResult::Success => success_count += 1,
             ParseResult::Skipped => skipped_count += 1,
             ParseResult::Error => fail_count += 1,
+        }
+    } else {
+        for file_path in files_to_parse {
+            match parse_file(
+                &file_path,
+                verbose,
+                &output_config,
+                strict_mode,
+                &ignored_warnings,
+            ) {
+                ParseResult::Success => success_count += 1,
+                ParseResult::Skipped => skipped_count += 1,
+                ParseResult::Error => fail_count += 1,
+            }
         }
     }
 

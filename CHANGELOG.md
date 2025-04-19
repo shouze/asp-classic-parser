@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2025-04-19
+
+### Added
+- New `--stdin` / `-s` option to parse code received directly from standard input
+- Improved error reporting when parsing from stdin with appropriate file reference as `<stdin>`
+- Comprehensive tests for stdin parsing capabilities including error handling and "no ASP tags" scenarios
+
+### Changed
+- Clarified usage help text to distinguish between stdin for file list (using `-`) and stdin for code content (using `--stdin`)
+- Enhanced code organization with a dedicated function for parsing stdin content
+
 ## [0.1.8] - 2025-04-19
 
 ### Added
