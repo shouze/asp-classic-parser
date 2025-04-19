@@ -9,6 +9,51 @@ mod parser;
 
 use output_format::{OutputFormat, map_severity};
 
+/// Extract line and column information from a parsing error message
+///
+/// This function parses error messages to extract line and column numbers,
+/// providing a more robust way to handle error location information.
+///
+/// # Arguments
+///
+/// * `error_message` - The error message string to parse
+///
+/// # Returns
+///
+/// A tuple of (line, column) with default values of (1, 1) if extraction fails
+fn extract_line_and_column(error_message: &str) -> (usize, usize) {
+    // Default values if we can't extract information
+    let default_position = (1, 1);
+
+    // Look for the line that contains position information
+    let position_line = error_message
+        .lines()
+        .find(|line| line.contains("--> line:"));
+
+    if let Some(line) = position_line {
+        // Extract line number
+        let line_num = line
+            .split("line:")
+            .nth(1)
+            .and_then(|pos| pos.split(':').next())
+            .and_then(|line_str| line_str.trim().parse::<usize>().ok());
+
+        // Extract column number
+        let col_num = line
+            .split(':')
+            .nth(2)
+            .and_then(|col_str| col_str.trim().parse::<usize>().ok());
+
+        match (line_num, col_num) {
+            (Some(line), Some(col)) => (line, col),
+            (Some(line), None) => (line, default_position.1),
+            _ => default_position,
+        }
+    } else {
+        default_position
+    }
+}
+
 /// Parse a single file and report results
 fn parse_file(path: &std::path::Path, verbose: bool, format: OutputFormat) -> bool {
     if verbose {
@@ -24,28 +69,9 @@ fn parse_file(path: &std::path::Path, verbose: bool, format: OutputFormat) -> bo
                     true
                 }
                 Err(e) => {
-                    // Extract line and column from the error if available
+                    // Extract line and column from the error using our dedicated helper function
                     let error_message = e.to_string();
-                    let line = error_message
-                        .lines()
-                        .find(|line| line.contains("--> line:"))
-                        .and_then(|line| {
-                            line.split("line:")
-                                .nth(1)
-                                .and_then(|pos| pos.split(':').next())
-                                .and_then(|line_str| line_str.parse::<usize>().ok())
-                        })
-                        .unwrap_or(1);
-
-                    let column = error_message
-                        .lines()
-                        .find(|line| line.contains("--> line:"))
-                        .and_then(|line| {
-                            line.split(':')
-                                .nth(2)
-                                .and_then(|col_str| col_str.parse::<usize>().ok())
-                        })
-                        .unwrap_or(1);
+                    let (line, column) = extract_line_and_column(&error_message);
 
                     // Get the appropriate severity for this error
                     let severity = map_severity("parse_error");
