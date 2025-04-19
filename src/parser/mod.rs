@@ -8,12 +8,29 @@ use pest_derive::Parser;
 use std::error::Error;
 use std::fmt;
 
+/// Error types for ASP parsing
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AspErrorKind {
+    /// No ASP tags were found in the file
+    NoAspTags,
+    /// Syntax error or other parsing issue
+    ParseError,
+}
+
 /// Custom error type for ASP parsing errors
 #[derive(Debug)]
 pub struct AspParseError {
     message: String,
     line: Option<usize>,
     column: Option<usize>,
+    kind: AspErrorKind,
+}
+
+impl AspParseError {
+    /// Returns true if this error represents a file with no ASP tags
+    pub fn is_no_asp_tags_error(&self) -> bool {
+        self.kind == AspErrorKind::NoAspTags
+    }
 }
 
 impl fmt::Display for AspParseError {
@@ -93,6 +110,7 @@ pub fn parse(input: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
                     message: "No valid ASP tags found in the file".to_string(),
                     line: None,
                     column: None,
+                    kind: AspErrorKind::NoAspTags,
                 }));
             }
 
@@ -110,6 +128,7 @@ pub fn parse(input: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
                 message,
                 line,
                 column,
+                kind: AspErrorKind::ParseError,
             }))
         }
     }

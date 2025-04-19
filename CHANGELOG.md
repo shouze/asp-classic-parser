@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2025-04-19
+
+### Added
+- New warning system for files without ASP tags instead of treating them as errors
+- Added `--strict` option to treat "no-asp-tags" warnings as errors
+- Added `--ignore-warnings` option to suppress specific warnings (e.g., `--ignore-warnings=no-asp-tags`)
+- Added summary line showing count of skipped files (e.g., "3 files skipped – no ASP tags")
+- Enhanced error type system with `AspErrorKind` enum for better error categorization
+
+### Changed
+- Improved file handling logic now returns more detailed `ParseResult` (Success/Error/Skipped)
+- Refined error and warning messages for better readability
+- Updated tests to comprehensively verify new warning behavior options
+
 ## [0.1.5] - 2025-04-19
 
 ### Added
