@@ -4,6 +4,8 @@ use semver::Version;
 use serde_json::Value;
 use std::env::{self, consts};
 use std::fs::{self, File};
+#[cfg(windows)]
+use std::io::Write;
 use std::io::{self, Read, copy};
 use std::path::{Path, PathBuf};
 use std::process::Command;
