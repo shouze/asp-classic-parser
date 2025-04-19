@@ -24,10 +24,10 @@ The simplest way to install ASP Classic Parser is by using our installation scri
 
 ```bash
 # Download and run the installation script
-curl -sSL https://raw.githubusercontent.com/yourusername/asp-classic-parser/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/shouze/asp-classic-parser/refs/heads/master/install.sh | bash
 
 # Or with wget
-wget -qO- https://raw.githubusercontent.com/yourusername/asp-classic-parser/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/shouze/asp-classic-parser/refs/heads/master/install.sh | bash
 ```
 
 This script will:
@@ -39,19 +39,19 @@ This script will:
 For more options, you can download the script and run it with the `--help` flag:
 
 ```bash
-curl -O https://raw.githubusercontent.com/yourusername/asp-classic-parser/main/install.sh
+curl -O https://raw.githubusercontent.com/shouze/asp-classic-parser/refs/heads/master/install.sh
 chmod +x install.sh
 ./install.sh --help
 ```
 
 ### Option 2: Manual Download
 
-You can manually download the appropriate binary for your system from the [Releases page](https://github.com/yourusername/asp-classic-parser/releases).
+You can manually download the appropriate binary for your system from the [Releases page](https://github.com/shouze/asp-classic-parser/releases).
 
 ### Option 3: Building from Source
 
 ```bash
-git clone https://github.com/yourusername/asp-classic-parser.git
+git clone https://github.com/shouze/asp-classic-parser.git
 cd asp-classic-parser
 cargo build --release
 ```
