@@ -13,6 +13,7 @@ This parser provides comprehensive coverage of ASP Classic syntax including:
 - Support for different encodings, including ISO-8859-1/Latin-1 commonly used in legacy ASP code
 - Detailed error reporting with line numbers and error types
 - Verbose mode for detailed output during parsing
+- Multiple output formats for integration with CI systems or machine processing
 
 ## Installation
 
@@ -104,6 +105,54 @@ asp-classic-parser --exclude="logs/**,temp/**" --replace-exclude path/to/directo
 # Disable all exclusions (including defaults)
 asp-classic-parser --replace-exclude path/to/directory
 ```
+
+### Output Format Options
+
+```bash
+# Use the default ASCII format
+asp-classic-parser file.asp
+
+# Use GitHub Actions compatible format
+asp-classic-parser --format=ci file.asp
+
+# Use JSON format for machine processing
+asp-classic-parser --format=json file.asp
+
+# Automatically detect the best format (default)
+asp-classic-parser --format=auto file.asp
+```
+
+The tool supports three output formats:
+
+1. **ASCII** (default): Human-readable plain text output
+2. **CI**: GitHub Actions compatible format with problem matchers
+3. **JSON**: Machine-readable structured data
+
+The automatic detection (`--format=auto` or omitting the format) will:
+- Use CI format when running in a CI environment (when CI=true)
+- Use CI format when output is not to a terminal (when piped)
+- Use ASCII format when in an interactive terminal
+
+### Diagnostic Severity Levels
+
+The parser maps different types of issues to three severity levels:
+
+- **Error**: Critical issues that prevent parsing or render code non-functional
+- **Warning**: Potential issues that could cause runtime problems
+- **Notice**: Non-critical style or best practice suggestions
+
+| Error Code | Severity | Description |
+|------------|----------|-------------|
+| parse_error | error | Invalid syntax that prevents parsing |
+| syntax_error | error | Valid parse but invalid language syntax |
+| encoding_error | error | File encoding issues |
+| io_error | error | File reading/writing problems |
+| deprecated_feature | warning | Use of deprecated VBScript features |
+| potential_bug | warning | Code patterns likely to cause runtime issues |
+| compatibility_issue | warning | Features with cross-browser compatibility problems |
+| best_practice | notice | Suggestions for code improvement |
+| style_issue | notice | Formatting and style guidance |
+| performance_tip | notice | Performance optimization suggestions |
 
 ### Command Line Options
 

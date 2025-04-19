@@ -4,10 +4,13 @@ use std::path::PathBuf;
 use std::process;
 
 mod file_utils;
+mod output_format;
 mod parser;
 
+use output_format::{OutputFormat, map_severity};
+
 /// Parse a single file and report results
-fn parse_file(path: &std::path::Path, verbose: bool) -> bool {
+fn parse_file(path: &std::path::Path, verbose: bool, format: OutputFormat) -> bool {
     if verbose {
         println!("Parsing file: {}", path.display());
     }
@@ -16,18 +19,55 @@ fn parse_file(path: &std::path::Path, verbose: bool) -> bool {
         Ok(content) => {
             match parser::parse(&content, verbose) {
                 Ok(_) => {
-                    // Always show success message, even in non-verbose mode
-                    println!("File parsed successfully: {}", path.display());
+                    // Show success message with the specified format
+                    println!("{}", format.format_success(path));
                     true
                 }
                 Err(e) => {
-                    eprintln!("Error parsing file '{}': {}", path.display(), e);
+                    // Extract line and column from the error if available
+                    let error_message = e.to_string();
+                    let line = error_message
+                        .lines()
+                        .find(|line| line.contains("--> line:"))
+                        .and_then(|line| {
+                            line.split("line:")
+                                .nth(1)
+                                .and_then(|pos| pos.split(':').next())
+                                .and_then(|line_str| line_str.parse::<usize>().ok())
+                        })
+                        .unwrap_or(1);
+
+                    let column = error_message
+                        .lines()
+                        .find(|line| line.contains("--> line:"))
+                        .and_then(|line| {
+                            line.split(':')
+                                .nth(2)
+                                .and_then(|col_str| col_str.parse::<usize>().ok())
+                        })
+                        .unwrap_or(1);
+
+                    // Get the appropriate severity for this error
+                    let severity = map_severity("parse_error");
+
+                    // Format and print the error according to the selected output format
+                    let path_str = path.display().to_string();
+                    eprintln!(
+                        "{}",
+                        format.format_error(&path_str, line, column, &error_message, severity)
+                    );
                     false
                 }
             }
         }
         Err(e) => {
-            eprintln!("Error reading file '{}': {}", path.display(), e);
+            // Format file reading errors using the same format
+            let path_str = path.display().to_string();
+            let error_msg = format!("Cannot read file: {}", e);
+            eprintln!(
+                "{}",
+                format.format_error(&path_str, 1, 1, &error_msg, "error")
+            );
             false
         }
     }
@@ -53,6 +93,16 @@ fn main() {
                 .required(false),
         )
         .arg(
+            Arg::new("format")
+                .long("format")
+                .short('f')
+                .help("Output format: ascii (default), ci (GitHub Actions), json")
+                .value_name("FORMAT")
+                .value_parser(["ascii", "ci", "json"])
+                .default_missing_value("auto")
+                .required(false),
+        )
+        .arg(
             Arg::new("exclude")
                 .long("exclude")
                 .short('e')
@@ -70,6 +120,20 @@ fn main() {
                 .required(false),
         )
         .get_matches();
+
+    // Determine the output format
+    let output_format = match matches.get_one::<String>("format") {
+        Some(format_str) if format_str == "auto" => OutputFormat::detect_format(),
+        Some(format_str) => match OutputFormat::from_str(format_str) {
+            Ok(format) => format,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                eprintln!("Using default ASCII format instead");
+                OutputFormat::Ascii
+            }
+        },
+        None => OutputFormat::detect_format(),
+    };
 
     let mut paths_to_parse: Vec<PathBuf> = Vec::new();
     let mut success_count = 0;
@@ -174,7 +238,7 @@ fn main() {
     }
 
     for file_path in files_to_parse {
-        if parse_file(&file_path, verbose) {
+        if parse_file(&file_path, verbose, output_format) {
             success_count += 1;
         } else {
             fail_count += 1;
@@ -183,10 +247,28 @@ fn main() {
 
     // Report summary only in verbose mode or if there were failures
     if verbose || fail_count > 0 {
-        println!(
-            "Parsing complete: {} succeeded, {} failed",
-            success_count, fail_count
-        );
+        match output_format {
+            OutputFormat::Ascii => {
+                println!(
+                    "Parsing complete: {} succeeded, {} failed",
+                    success_count, fail_count
+                );
+            }
+            OutputFormat::Ci => {
+                println!(
+                    "::notice::ASP Classic Parser: {} files succeeded, {} files failed",
+                    success_count, fail_count
+                );
+            }
+            OutputFormat::Json => {
+                println!(
+                    "{{\"summary\": {{\"total\": {}, \"success\": {}, \"failed\": {}}}}}",
+                    success_count + fail_count,
+                    success_count,
+                    fail_count
+                );
+            }
+        }
     }
 
     // Return non-zero exit code if any file failed to parse
