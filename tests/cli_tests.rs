@@ -514,3 +514,183 @@ fn test_cli_quiet_success_option() {
         "Summary should still be shown with --quiet-success option"
     );
 }
+
+// Test the --stdin option for direct code parsing in v0.1.9
+#[test]
+fn test_cli_stdin_direct_parsing() {
+    use std::process::{Command, Stdio};
+
+    // Prepare sample ASP code
+    let asp_code = "<% Response.Write \"Direct stdin parsing test\" %>";
+
+    // Create a command with stdin piped and force ASCII format for consistent testing
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg("--stdin") // Use the new stdin option
+        .arg("--format=ascii") // Force ASCII format
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped()) // Capture stderr too for better debugging
+        .spawn()
+        .expect("Failed to spawn CLI process");
+
+    // Write ASP code directly to stdin
+    if let Some(mut stdin) = cmd.stdin.take() {
+        stdin
+            .write_all(asp_code.as_bytes())
+            .expect("Failed to write ASP code to stdin");
+        // stdin is closed automatically when dropped
+    } else {
+        panic!("Failed to open stdin");
+    }
+
+    // Get the output
+    let output = cmd.wait_with_output().expect("Failed to wait for CLI");
+
+    // Convert stdout and stderr to strings for inspection
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    // Print output for debugging
+    println!("Stdin parsing output (stdout): {}", stdout);
+    if !stderr.is_empty() {
+        println!("Stdin parsing error (stderr): {}", stderr);
+    }
+
+    // Check the exit code is successful
+    assert_eq!(
+        exit_code, 0,
+        "Should exit with code 0 (success), got: {}",
+        exit_code
+    );
+
+    // Check for success message
+    assert!(
+        stdout.contains("✓ <stdin> parsed successfully"),
+        "Should show success message for stdin parsing, got: {}",
+        stdout
+    );
+
+    // Check we don't have any error output
+    assert!(
+        stderr.is_empty(),
+        "Should not have error output, got: {}",
+        stderr
+    );
+}
+
+// Test the --stdin option with invalid ASP code
+#[test]
+fn test_cli_stdin_with_errors() {
+    use std::process::{Command, Stdio};
+
+    // Prepare invalid ASP code (missing closing tag)
+    let invalid_asp_code = "<% Response.Write \"Missing closing tag";
+
+    // Create a command with stdin piped
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg("--stdin")
+        .arg("--format=ascii")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn CLI process");
+
+    // Write invalid ASP code to stdin
+    if let Some(mut stdin) = cmd.stdin.take() {
+        stdin
+            .write_all(invalid_asp_code.as_bytes())
+            .expect("Failed to write invalid ASP code to stdin");
+    } else {
+        panic!("Failed to open stdin");
+    }
+
+    // Get the output
+    let output = cmd.wait_with_output().expect("Failed to wait for CLI");
+
+    // Convert stdout and stderr to strings for inspection
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    println!("Stdin error parsing output (stdout): {}", stdout);
+    println!("Stdin error parsing stderr: {}", stderr);
+
+    // Check the exit code indicates an error
+    assert_eq!(
+        exit_code, 1,
+        "Should exit with code 1 (error), got: {}",
+        exit_code
+    );
+
+    // Check that error output contains the error symbol and useful message
+    assert!(
+        stderr.contains("✖") && stderr.contains("<stdin>"),
+        "Error output should contain error symbol and reference stdin"
+    );
+
+    // Check that summary shows 1 file failed
+    assert!(
+        stdout.contains("0 succeeded, 1 failed"),
+        "Summary should show 1 file failed"
+    );
+}
+
+// Test the --stdin option with content having no ASP tags
+#[test]
+fn test_cli_stdin_no_asp_tags() {
+    use std::process::{Command, Stdio};
+
+    // Prepare HTML content with no ASP tags
+    let html_content = "<html><body><h1>No ASP tags here</h1></body></html>";
+
+    // Create a command with stdin piped
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg("--stdin")
+        .arg("--format=ascii")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn CLI process");
+
+    // Write HTML content to stdin
+    if let Some(mut stdin) = cmd.stdin.take() {
+        stdin
+            .write_all(html_content.as_bytes())
+            .expect("Failed to write HTML content to stdin");
+    } else {
+        panic!("Failed to open stdin");
+    }
+
+    // Get the output
+    let output = cmd.wait_with_output().expect("Failed to wait for CLI");
+
+    // Convert stdout and stderr to strings for inspection
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    println!("Stdin no-asp-tags output (stdout): {}", stdout);
+    println!("Stdin no-asp-tags stderr: {}", stderr);
+
+    // Check the exit code is successful
+    assert_eq!(
+        exit_code, 0,
+        "Should exit with code 0 (success) despite no ASP tags, got: {}",
+        exit_code
+    );
+
+    // Check that warning output contains the warning symbol
+    assert!(
+        stderr.contains("⚠") && stderr.contains("No ASP tags found"),
+        "Should show warning about no ASP tags"
+    );
+
+    // Check that summary shows 1 file skipped
+    assert!(
+        stdout.contains("0 succeeded, 0 failed, 1 skipped"),
+        "Summary should show 1 file skipped"
+    );
+}
