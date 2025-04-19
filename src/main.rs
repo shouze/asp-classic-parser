@@ -7,7 +7,9 @@ mod file_utils;
 mod output_format;
 mod parser;
 
-use output_format::{OutputFormat, map_severity};
+use output_format::{
+    OutputConfig, OutputFormat, format_error, format_success, format_summary, map_severity,
+};
 
 /// Represents the result of parsing a file
 enum ParseResult {
@@ -68,7 +70,7 @@ fn extract_line_and_column(error_message: &str) -> (usize, usize) {
 fn parse_file(
     path: &std::path::Path,
     verbose: bool,
-    format: OutputFormat,
+    output_config: &OutputConfig,
     strict_mode: bool,
     ignored_warnings: &[String],
 ) -> ParseResult {
@@ -80,8 +82,10 @@ fn parse_file(
         Ok(content) => {
             match parser::parse(&content, verbose) {
                 Ok(_) => {
-                    // Show success message with the specified format
-                    println!("{}", format.format_success(path));
+                    // Show success message if configured to do so
+                    if output_config.show_success {
+                        println!("{}", format_success(output_config, path));
+                    }
                     ParseResult::Success
                 }
                 Err(e) => {
@@ -96,7 +100,14 @@ fn parse_file(
                                 let error_msg = "No ASP tags found in file";
                                 eprintln!(
                                     "{}",
-                                    format.format_error(&path_str, 1, 1, error_msg, "error")
+                                    format_error(
+                                        output_config,
+                                        &path_str,
+                                        1,
+                                        1,
+                                        error_msg,
+                                        "error"
+                                    )
                                 );
                                 return ParseResult::Error;
                             }
@@ -108,7 +119,8 @@ fn parse_file(
                                     let warning_msg = "No ASP tags found in file - skipping";
                                     eprintln!(
                                         "{}",
-                                        format.format_error(
+                                        format_error(
+                                            output_config,
                                             &path_str,
                                             1,
                                             1,
@@ -134,7 +146,14 @@ fn parse_file(
                     let path_str = path.display().to_string();
                     eprintln!(
                         "{}",
-                        format.format_error(&path_str, line, column, &error_message, severity)
+                        format_error(
+                            output_config,
+                            &path_str,
+                            line,
+                            column,
+                            &error_message,
+                            severity
+                        )
                     );
                     ParseResult::Error
                 }
@@ -146,7 +165,7 @@ fn parse_file(
             let error_msg = format!("Cannot read file: {}", e);
             eprintln!(
                 "{}",
-                format.format_error(&path_str, 1, 1, &error_msg, "error")
+                format_error(output_config, &path_str, 1, 1, &error_msg, "error")
             );
             ParseResult::Error
         }
@@ -178,8 +197,22 @@ fn main() {
                 .short('f')
                 .help("Output format: ascii (default), ci (GitHub Actions), json")
                 .value_name("FORMAT")
-                .value_parser(["ascii", "ci", "json"])
+                .value_parser(["ascii", "ci", "json", "auto"])
                 .default_missing_value("auto")
+                .required(false),
+        )
+        .arg(
+            Arg::new("no-color")
+                .long("no-color")
+                .help("Disable colored output in terminal")
+                .action(ArgAction::SetTrue)
+                .required(false),
+        )
+        .arg(
+            Arg::new("quiet-success")
+                .long("quiet-success")
+                .help("Don't show messages for successfully parsed files")
+                .action(ArgAction::SetTrue)
                 .required(false),
         )
         .arg(
@@ -218,8 +251,7 @@ fn main() {
         .get_matches();
 
     // Determine the output format
-    let output_format = match matches.get_one::<String>("format") {
-        Some(format_str) if format_str == "auto" => OutputFormat::detect_format(),
+    let format = match matches.get_one::<String>("format") {
         Some(format_str) => match OutputFormat::from_str(format_str) {
             Ok(format) => format,
             Err(e) => {
@@ -229,6 +261,13 @@ fn main() {
             }
         },
         None => OutputFormat::detect_format(),
+    };
+
+    // Create output configuration
+    let output_config = OutputConfig {
+        format,
+        use_colors: !matches.get_flag("no-color"),
+        show_success: !matches.get_flag("quiet-success"),
     };
 
     let mut paths_to_parse: Vec<PathBuf> = Vec::new();
@@ -241,8 +280,11 @@ fn main() {
         None => Vec::new(),
     };
 
-    if verbose && !ignored_warnings.is_empty() {
-        println!("Ignoring warnings: {}", ignored_warnings.join(", "));
+    if verbose {
+        println!("Using output format: {}", output_config.format);
+        if !ignored_warnings.is_empty() {
+            println!("Ignoring warnings: {}", ignored_warnings.join(", "));
+        }
     }
 
     // Counters for success, failures, and skipped files
@@ -351,7 +393,7 @@ fn main() {
         match parse_file(
             &file_path,
             verbose,
-            output_format,
+            &output_config,
             strict_mode,
             &ignored_warnings,
         ) {
@@ -362,44 +404,13 @@ fn main() {
     }
 
     // Report summary
-    // Always show summary if there are skipped files (new in v0.1.6)
-    // or if in verbose mode or if there were failures (existing behavior)
+    // Always show summary if there are skipped files
+    // or if in verbose mode or if there were failures
     if verbose || fail_count > 0 || skipped_count > 0 {
-        match output_format {
-            OutputFormat::Ascii => {
-                println!(
-                    "Parsing complete: {} succeeded, {} failed, {} skipped",
-                    success_count, fail_count, skipped_count
-                );
-
-                // Show the specific "skipped - no ASP tags" message if any files were skipped
-                if skipped_count > 0 {
-                    println!("{} files skipped – no ASP tags", skipped_count);
-                }
-            }
-            OutputFormat::Ci => {
-                println!(
-                    "::notice::ASP Classic Parser: {} files succeeded, {} files failed",
-                    success_count, fail_count
-                );
-
-                if skipped_count > 0 {
-                    println!(
-                        "::notice::ASP Classic Parser: {} files skipped – no ASP tags",
-                        skipped_count
-                    );
-                }
-            }
-            OutputFormat::Json => {
-                println!(
-                    "{{\"summary\": {{\"total\": {}, \"success\": {}, \"failed\": {}, \"skipped\": {}, \"skipped_reason\": \"no ASP tags\"}}}}",
-                    success_count + fail_count + skipped_count,
-                    success_count,
-                    fail_count,
-                    skipped_count
-                );
-            }
-        }
+        println!(
+            "{}",
+            format_summary(&output_config, success_count, fail_count, skipped_count)
+        );
     }
 
     // Return non-zero exit code if any file failed to parse

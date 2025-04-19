@@ -364,3 +364,153 @@ fn test_cli_no_asp_tags() {
         "Should show success for the valid ASP file"
     );
 }
+
+// Test for the new colored output features and symbols in v0.1.8
+#[test]
+fn test_cli_colored_output() {
+    // Create a temporary directory with test files
+    let temp_dir = tempdir().expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    // Create a sample ASP file
+    let asp_file_path = temp_path.join("colored_test.asp");
+    fs::write(
+        &asp_file_path,
+        "<% Response.Write \"Test colored output\" %>",
+    )
+    .expect("Failed to write colored_test.asp");
+
+    // Create a file with syntax error
+    let error_file_path = temp_path.join("error_test.asp");
+    fs::write(&error_file_path, "<% Response.Write \"Missing closing tag")
+        .expect("Failed to write error_test.asp");
+
+    // Create an HTML file (no ASP tags - will generate warning)
+    let html_file_path = temp_path.join("warning_test.html");
+    fs::write(
+        &html_file_path,
+        "<html><body>No ASP tags here</body></html>",
+    )
+    .expect("Failed to write warning_test.html");
+
+    // Test with default settings (colors enabled)
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(asp_file_path.to_str().unwrap())
+        .arg(error_file_path.to_str().unwrap())
+        .arg(html_file_path.to_str().unwrap())
+        .arg("--format=ascii")
+        .output()
+        .expect("Failed to execute CLI");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("Colored output stdout: {}", stdout);
+    println!("Colored output stderr: {}", stderr);
+
+    // Check for colored output markers
+    // Note: This only verifies the characters, as we cannot reliably check for ANSI color codes in tests
+    assert!(
+        stdout.contains("✓"),
+        "Success output should contain checkmark symbol"
+    );
+
+    assert!(stderr.contains("✖"), "Error output should contain X symbol");
+
+    assert!(
+        stderr.contains("⚠"),
+        "Warning output should contain warning symbol"
+    );
+}
+
+// Test the --no-color option
+#[test]
+fn test_cli_no_color_option() {
+    // Create a temporary directory with test file
+    let temp_dir = tempdir().expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    // Create a sample ASP file
+    let asp_file_path = temp_path.join("no_color_test.asp");
+    fs::write(
+        &asp_file_path,
+        "<% Response.Write \"Test no-color option\" %>",
+    )
+    .expect("Failed to write no_color_test.asp");
+
+    // Run with --no-color option
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(asp_file_path.to_str().unwrap())
+        .arg("--format=ascii")
+        .arg("--no-color")
+        .output()
+        .expect("Failed to execute CLI");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Check for the success message with checkmark but without color codes
+    assert!(
+        stdout.contains("✓") && stdout.contains("parsed successfully"),
+        "No-color output should still contain checkmark symbol: {}",
+        stdout
+    );
+
+    // We can't directly verify absence of color codes in a reliable way across platforms,
+    // but we can check that the basic formatting is there
+}
+
+// Test the --quiet-success option
+#[test]
+fn test_cli_quiet_success_option() {
+    // Create a temporary directory with test files
+    let temp_dir = tempdir().expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    // Create a successful ASP file
+    let success_file_path = temp_path.join("quiet_success.asp");
+    fs::write(&success_file_path, "<% Response.Write \"Hello\" %>")
+        .expect("Failed to write quiet_success.asp");
+
+    // Create an HTML file (no ASP tags - will generate warning)
+    let html_file_path = temp_path.join("warning_success.html");
+    fs::write(
+        &html_file_path,
+        "<html><body>No ASP tags here</body></html>",
+    )
+    .expect("Failed to write warning_success.html");
+
+    // Test with --quiet-success option
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(success_file_path.to_str().unwrap())
+        .arg(html_file_path.to_str().unwrap())
+        .arg("--format=ascii")
+        .arg("--quiet-success")
+        .output()
+        .expect("Failed to execute CLI");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("Quiet success stdout: {}", stdout);
+    println!("Quiet success stderr: {}", stderr);
+
+    // Success message should NOT be present
+    assert!(
+        !stdout.contains(&format!(
+            "{} parsed successfully",
+            success_file_path.display()
+        )),
+        "Success message should not be shown with --quiet-success option"
+    );
+
+    // Warning and summary should still be present
+    assert!(
+        stderr.contains("No ASP tags found"),
+        "Warning message should still be shown with --quiet-success option"
+    );
+
+    assert!(
+        stdout.contains("Parsing complete"),
+        "Summary should still be shown with --quiet-success option"
+    );
+}
