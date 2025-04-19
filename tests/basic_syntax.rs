@@ -12,8 +12,8 @@ fn test_basic_syntax_parsing() {
     // Read the test file
     let content = fs::read_to_string(fixture_path).expect("Failed to read test fixture file");
 
-    // Parse the content
-    let result = parser::parse(&content);
+    // Parse the content (with verbose=false)
+    let result = parser::parse(&content, false);
 
     // Check if parsing completes without errors
     assert!(
@@ -28,8 +28,8 @@ fn test_response_write_parsing() {
     // Simple ASP code with Response.Write
     let asp_code = "<%\nResponse.Write \"Hello, World!\"\n%>";
 
-    // Parse the content
-    let result = parser::parse(asp_code);
+    // Parse the content (with verbose=false)
+    let result = parser::parse(asp_code, false);
 
     // Check if parsing completes without errors
     assert!(
@@ -48,8 +48,8 @@ fn test_invalid_syntax_parsing() {
     let content =
         fs::read_to_string(fixture_path).expect("Failed to read invalid test fixture file");
 
-    // Parse the content
-    let result = parser::parse(&content);
+    // Parse the content (with verbose=false)
+    let result = parser::parse(&content, false);
 
     // Check that parsing fails for invalid syntax
     assert!(

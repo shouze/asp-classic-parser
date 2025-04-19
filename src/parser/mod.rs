@@ -45,6 +45,7 @@ pub struct AspParser;
 /// # Arguments
 ///
 /// * `input` - A string slice containing the ASP Classic code to parse
+/// * `verbose` - Optional flag to enable verbose output (default: false)
 ///
 /// # Returns
 ///
@@ -57,22 +58,22 @@ pub struct AspParser;
 /// use asp_classic_parser::parser;
 ///
 /// let asp_code = "<%\nResponse.Write \"Hello, World!\"\n%>";
-/// match parser::parse(asp_code) {
+/// match parser::parse(asp_code, false) {
 ///     Ok(_) => println!("ASP code parsed successfully!"),
 ///     Err(e) => eprintln!("Error parsing ASP code: {}", e),
 /// }
 /// ```
-pub fn parse(input: &str) -> Result<(), Box<dyn Error>> {
+pub fn parse(input: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
     // Parse the input with the file rule
     match AspParser::parse(Rule::file, input) {
         Ok(pairs) => {
             // Do some basic validation on the parse result
             let mut tag_count = 0;
             for pair in pairs {
-                // Currently just logging for debugging purposes
-                // In future iterations, this will build an AST
-                println!("Successfully parsed ASP file structure");
-                println!("Rule: {:?}", pair.as_rule());
+                // Only show rule details in verbose mode
+                if verbose {
+                    println!("Rule: {:?}", pair.as_rule());
+                }
 
                 // Count ASP tags to ensure we have balanced tags
                 for inner_pair in pair.into_inner() {

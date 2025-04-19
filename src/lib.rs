@@ -5,3 +5,6 @@
 /// with other Rust applications.
 // Export the parser module publicly
 pub mod parser;
+
+// Export the file utilities module
+pub mod file_utils;
