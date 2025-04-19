@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2025-04-19
+
+### Added
+- Enhanced ASCII output format with colored symbols for different message types:
+  - ✓ (green check mark) for successfully parsed files
+  - ✖ (red X) for errors
+  - ⚠ (yellow warning sign) for warnings
+  - ℹ (blue info symbol) for notices
+- New `--no-color` option to disable colored output in terminals
+- New `--quiet-success` option to hide messages for successfully parsed files
+- Automatic color support detection based on terminal capabilities and environment
+- Improved summary output with colored statistics
+
+### Changed
+- Made output more visually distinct and easier to scan
+- Refactored output formatting code for better organization and extensibility
+- Updated error type handling to support new output formatting options
+
 ## [0.1.7] - 2025-04-19
 
 ### Fixed

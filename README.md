@@ -12,6 +12,7 @@ This parser provides comprehensive coverage of ASP Classic syntax including:
 - Automatic exclusion of VCS and tooling directories (.git, node_modules, etc.)
 - Support for different encodings, including ISO-8859-1/Latin-1 commonly used in legacy ASP code
 - Detailed error reporting with line numbers and error types
+- Colorized output with distinctive symbols for different message types
 - Verbose mode for detailed output during parsing
 - Multiple output formats for integration with CI systems or machine processing
 
@@ -120,12 +121,24 @@ asp-classic-parser --format=json file.asp
 
 # Automatically detect the best format (default)
 asp-classic-parser --format=auto file.asp
+
+# Disable colored output
+asp-classic-parser --no-color file.asp
+
+# Hide success messages (only show errors and warnings)
+asp-classic-parser --quiet-success file.asp
 ```
 
 The tool supports three output formats:
 
-1. **ASCII** (default): Human-readable plain text output
+1. **ASCII** (default): Human-readable plain text output with colorized symbols:
+   - ✓ (green check mark) for successfully parsed files
+   - ✖ (red X) for errors
+   - ⚠ (yellow warning sign) for warnings
+   - ℹ (blue info symbol) for notices
+
 2. **CI**: GitHub Actions compatible format with problem matchers
+
 3. **JSON**: Machine-readable structured data
 
 The automatic detection (`--format=auto` or omitting the format) will:
@@ -163,11 +176,16 @@ Arguments:
   [FILES/DIRECTORIES...]  Files or directories to parse (use '-' for stdin)
 
 Options:
-  -v, --verbose           Enable verbose output
-  -e, --exclude=PATTERNS  Comma-separated list of glob patterns to exclude
-      --replace-exclude   Replace default exclusions with provided patterns
-  -h, --help              Print help
-  -V, --version           Print version
+  -v, --verbose             Enable verbose output
+  -f, --format=FORMAT       Output format: ascii (default), ci, json, or auto
+      --no-color            Disable colored output in terminal
+      --quiet-success       Don't show messages for successfully parsed files
+  -e, --exclude=PATTERNS    Comma-separated list of glob patterns to exclude
+      --replace-exclude     Replace default exclusions with provided patterns
+      --strict              Treat warnings as errors (e.g., no-asp-tags)
+      --ignore-warnings=WARNINGS  Comma-separated list of warnings to ignore
+  -h, --help                Print help
+  -V, --version             Print version
 ```
 
 ## Default Exclusions
