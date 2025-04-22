@@ -1,42 +1,33 @@
-name: Release
+name: Test Build
 
 on:
-  push:
-    tags:
-      - "[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  create-release:
-    name: create-release
+  # Simulated release job without actually creating a GitHub release
+  test-version:
+    name: test-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Get the release version from the tag
-        if: env.VERSION == ''
-        run: echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+      
+      # Using a fixed version for testing instead of extracting from tag
+      - name: Set test version
+        run: echo "VERSION=test-build" >> $GITHUB_ENV
+      
       - name: Show the version
         run: |
           echo "version is: $VERSION"
-      - name: Check that tag version and Cargo.toml version are the same
-        shell: bash
-        run: |
-          if ! grep -q "version = \"$VERSION\"" Cargo.toml; then
-            echo "version does not match Cargo.toml" >&2
-            exit 1
-          fi
-      - name: Create GitHub release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create $VERSION --draft --verify-tag --title $VERSION
     outputs:
       version: ${{ env.VERSION }}
 
-  build-release:
-    name: build-release
-    needs: ['create-release']
+  build-test:
+    name: build-test
+    needs: ['test-version']
     runs-on: ${{ matrix.os }}
     env:
       CARGO: cargo
@@ -153,7 +144,7 @@ jobs:
     - name: Determine binary path and archive name
       shell: bash
       run: |
-        version="${{ needs.create-release.outputs.version }}"
+        version="${{ needs.test-version.outputs.version }}"
         
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           bin="target/${{ matrix.target }}/release/asp-classic-parser.exe"
@@ -198,10 +189,11 @@ jobs:
         tar -czf "$ARCHIVE" -C dist .
         shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
 
-    - name: Upload release assets
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      shell: bash
-      run: |
-        version="${{ needs.create-release.outputs.version }}"
-        gh release upload "$version" "$ARCHIVE" "$ARCHIVE.sha256"
+    # Upload the artifacts to the workflow run
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.target }}
+        path: |
+          ${{ env.ARCHIVE }}
+          ${{ env.ARCHIVE }}.sha256
