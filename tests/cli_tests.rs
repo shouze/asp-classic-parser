@@ -870,3 +870,146 @@ fn test_cli_init_config() {
         "stdout should contain ignore_warnings option"
     );
 }
+
+#[test]
+fn test_cli_cache_functionality() {
+    // Create a temporary directory
+    let temp_dir = tempdir().expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    // Create a dedicated cache directory for this test
+    let test_cache_dir = temp_path.join(".cache/asp-classic-parser");
+    fs::create_dir_all(&test_cache_dir).expect("Failed to create test cache directory");
+
+    // Create environment variable to override cache directory
+    let cache_dir_var = format!("ASP_PARSER_CACHE_DIR={}", test_cache_dir.display());
+
+    // Create a sample ASP file
+    let asp_file_path = temp_path.join("cache_test.asp");
+    fs::write(&asp_file_path, "<% Response.Write \"Cache Test\" %>")
+        .expect("Failed to write cache_test.asp");
+
+    // First run: should parse the file normally and create a cache entry
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(asp_file_path.to_str().unwrap())
+        .arg("--verbose")
+        .arg("--format=ascii")
+        .env_clear()
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env(
+            &cache_dir_var.split('=').next().unwrap(),
+            &cache_dir_var.split('=').nth(1).unwrap(),
+        )
+        .output()
+        .expect("Failed to execute CLI");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    println!("First run output: {}", stdout);
+
+    // Verify that the file was parsed successfully
+    assert!(
+        stdout.contains(&format!("{} parsed successfully", asp_file_path.display())),
+        "File should parse successfully in first run"
+    );
+
+    // The first run should have created a cache entry and saved it
+    assert!(
+        stdout.contains("Cache initialized") && stdout.contains("Cache saved with"),
+        "Cache should be initialized and saved in first run"
+    );
+
+    // Verify cache file was created
+    let cache_file = test_cache_dir.join("parse_cache.json");
+    assert!(
+        cache_file.exists(),
+        "Cache file should exist after first run"
+    );
+
+    // Second run: should use the cache instead of re-parsing
+    let output2 = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(asp_file_path.to_str().unwrap())
+        .arg("--verbose")
+        .arg("--format=ascii")
+        .env_clear()
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env(
+            &cache_dir_var.split('=').next().unwrap(),
+            &cache_dir_var.split('=').nth(1).unwrap(),
+        )
+        .output()
+        .expect("Failed to execute CLI for second run");
+
+    let stdout2 = String::from_utf8_lossy(&output2.stdout);
+    println!("Second run output: {}", stdout2);
+
+    // Verify that the cache was used
+    assert!(
+        stdout2.contains("Using cached result for:"),
+        "Second run should use cached result"
+    );
+
+    // Verify the file was still reported as successful
+    assert!(
+        stdout2.contains(&format!("{} parsed successfully", asp_file_path.display())),
+        "File should be reported as successful when using cache"
+    );
+
+    // Third run: use --no-cache to bypass cache
+    let output3 = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(asp_file_path.to_str().unwrap())
+        .arg("--verbose")
+        .arg("--format=ascii")
+        .arg("--no-cache")
+        .env_clear()
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env(
+            &cache_dir_var.split('=').next().unwrap(),
+            &cache_dir_var.split('=').nth(1).unwrap(),
+        )
+        .output()
+        .expect("Failed to execute CLI with --no-cache");
+
+    let stdout3 = String::from_utf8_lossy(&output3.stdout);
+    println!("No-cache run output: {}", stdout3);
+
+    // Verify that the cache was disabled
+    assert!(
+        stdout3.contains("Cache disabled with --no-cache flag"),
+        "Cache should be disabled with --no-cache flag"
+    );
+
+    // The file should still parse successfully
+    assert!(
+        stdout3.contains(&format!("{} parsed successfully", asp_file_path.display())),
+        "File should parse successfully with cache disabled"
+    );
+
+    // Fourth run: modify the file and check if cache is invalidated
+    fs::write(
+        &asp_file_path,
+        "<% Response.Write \"Modified Cache Test\" %>",
+    )
+    .expect("Failed to modify cache_test.asp");
+
+    let output4 = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(asp_file_path.to_str().unwrap())
+        .arg("--verbose")
+        .arg("--format=ascii")
+        .env_clear()
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env(
+            &cache_dir_var.split('=').next().unwrap(),
+            &cache_dir_var.split('=').nth(1).unwrap(),
+        )
+        .output()
+        .expect("Failed to execute CLI after file modification");
+
+    let stdout4 = String::from_utf8_lossy(&output4.stdout);
+    println!("After modification output: {}", stdout4);
+
+    // Verify that the modified file was re-parsed
+    assert!(
+        stdout4.contains("File or options changed since last run - re-parsing"),
+        "Cache should detect file changes and re-parse"
+    );
+}

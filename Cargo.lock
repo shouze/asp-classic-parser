@@ -80,7 +80,7 @@ dependencies = [
 
 [[package]]
 name = "asp-classic-parser"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "clap",
  "colored",
@@ -94,6 +94,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sha2",
  "tar",
  "tempfile",
  "thiserror 1.0.69",

@@ -251,6 +251,34 @@ exclude = "backup/**,*.tmp"
 replace_exclude = false
 ```
 
+### Caching Options
+
+The parser supports an incremental parsing cache to improve performance on repeated runs:
+
+```bash
+# Use the cache (enabled by default)
+asp-classic-parser path/to/directory
+
+# Disable the cache and force re-parsing all files
+asp-classic-parser --no-cache path/to/directory
+
+# Configure cache in your config file
+echo 'cache = true  # Enable cache (default)' >> asp-parser.toml
+```
+
+The caching system:
+- Automatically stores parsing results in a local cache file
+- Detects changes in file content using content hashing
+- Invalidates cache entries when CLI options change
+- Only re-parses files that have changed since the last run
+- Removes old cache entries automatically (older than 24 hours)
+- Provides cache statistics in verbose mode (`--verbose`)
+
+The cache is stored in your system's cache directory:
+- On Linux: `~/.cache/asp-classic-parser/`
+- On macOS: `~/Library/Caches/asp-classic-parser/`
+- On Windows: `%LOCALAPPDATA%\asp-classic-parser\`
+
 ### Command Line Options
 
 ```
