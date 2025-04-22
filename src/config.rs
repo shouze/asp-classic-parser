@@ -44,6 +44,9 @@ pub struct Config {
 
     /// Replace default exclusions instead of extending them
     pub replace_exclude: Option<bool>,
+
+    /// Enable parsing cache
+    pub cache: Option<bool>,
 }
 
 impl Config {
@@ -86,6 +89,9 @@ impl Config {
 
 # Replace default exclusions instead of extending them
 # replace_exclude = false
+
+# Enable parsing cache
+# cache = false
 "#
         .to_string()
     }
@@ -153,6 +159,7 @@ impl Config {
             },
             exclude: self.exclude.clone().or_else(|| other.exclude.clone()),
             replace_exclude: self.replace_exclude.or(other.replace_exclude),
+            cache: self.cache.or(other.cache),
         }
     }
 
@@ -200,6 +207,11 @@ impl Config {
             let value = if replace_exclude { "true" } else { "false" };
             args.entry("replace-exclude".to_string())
                 .or_insert(value.to_string());
+        }
+
+        if let Some(cache) = self.cache {
+            let value = if cache { "true" } else { "false" };
+            args.entry("cache".to_string()).or_insert(value.to_string());
         }
     }
 }
@@ -253,6 +265,7 @@ exclude = "node_modules,*.min.js"
             ignore_warnings: Some(vec!["no-asp-tags".to_string()]),
             exclude: None,
             replace_exclude: None,
+            cache: None,
         };
 
         let config2 = Config {
@@ -264,6 +277,7 @@ exclude = "node_modules,*.min.js"
             ignore_warnings: Some(vec!["unused-variable".to_string()]),
             exclude: Some("node_modules".to_string()),
             replace_exclude: None,
+            cache: Some(true),
         };
 
         // config1 takes precedence over config2
@@ -282,6 +296,7 @@ exclude = "node_modules,*.min.js"
         assert!(warnings.contains(&"unused-variable".to_string()));
 
         assert_eq!(merged.exclude, Some("node_modules".to_string())); // From config2
+        assert_eq!(merged.cache, Some(true)); // From config2
     }
 
     #[test]
@@ -295,6 +310,7 @@ exclude = "node_modules,*.min.js"
             ignore_warnings: Some(vec!["no-asp-tags".to_string()]),
             exclude: None,
             replace_exclude: None,
+            cache: Some(true),
         };
 
         let mut args = HashMap::new();
@@ -320,6 +336,9 @@ exclude = "node_modules,*.min.js"
         assert!(args.get("quiet-success").is_none());
         assert!(args.get("exclude").is_none());
         assert!(args.get("replace-exclude").is_none());
+
+        // Should be set from config
+        assert_eq!(args.get("cache"), Some(&"true".to_string()));
     }
 
     #[test]
@@ -335,5 +354,6 @@ exclude = "node_modules,*.min.js"
         assert!(config_str.contains("# ignore_warnings ="));
         assert!(config_str.contains("# exclude ="));
         assert!(config_str.contains("# replace_exclude ="));
+        assert!(config_str.contains("# cache ="));
     }
 }

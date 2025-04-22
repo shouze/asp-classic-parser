@@ -4,12 +4,14 @@ use std::io::{self, BufRead, Read};
 use std::path::PathBuf;
 use std::process;
 
+mod cache;
 mod config;
 mod file_utils;
 mod output_format;
 mod parser;
 mod updater;
 
+use cache::Cache;
 use config::Config;
 use output_format::{
     OutputConfig, OutputFormat, format_error, format_success, format_summary, map_severity,
@@ -71,17 +73,104 @@ fn extract_line_and_column(error_message: &str) -> (usize, usize) {
 }
 
 /// Parse a single file and report results
+#[allow(clippy::too_many_arguments)]
 fn parse_file(
     path: &std::path::Path,
     verbose: bool,
     output_config: &OutputConfig,
     strict_mode: bool,
     ignored_warnings: &[String],
+    cache_enabled: bool,
+    cache: &mut Option<Cache>,
+    options_hash: &str,
 ) -> ParseResult {
     if verbose {
         println!("Parsing file: {}", path.display());
     }
 
+    // Check if file is in cache and the cache is valid
+    if cache_enabled && path.exists() {
+        if let Some(cache_obj) = cache {
+            match cache_obj.is_valid(path, options_hash) {
+                Ok(true) => {
+                    // File is in cache and hasn't changed
+                    if verbose {
+                        println!("Using cached result for: {}", path.display());
+                    }
+
+                    if let Some(success) = cache_obj.was_successful(path) {
+                        if success {
+                            // Show success message if configured to do so
+                            if output_config.show_success {
+                                println!("{}", format_success(output_config, path));
+                            }
+                            return ParseResult::Success;
+                        } else {
+                            // Always show the warning/error message
+                            let path_str = path.display().to_string();
+
+                            // Check for skipped files (no-asp-tags)
+                            let cache_skipped = cache_obj.was_successful(path) == Some(false);
+
+                            if !ignored_warnings.contains(&"no-asp-tags".to_string())
+                                && cache_skipped
+                            {
+                                let warning_msg = "No ASP tags found in file - skipping";
+
+                                if strict_mode {
+                                    eprintln!(
+                                        "{}",
+                                        format_error(
+                                            output_config,
+                                            &path_str,
+                                            1,
+                                            1,
+                                            "No ASP tags found in file",
+                                            "error"
+                                        )
+                                    );
+                                    return ParseResult::Error;
+                                } else {
+                                    // Show warning only if in verbose mode or not explicitly ignored
+                                    if verbose || ignored_warnings.is_empty() {
+                                        eprintln!(
+                                            "{}",
+                                            format_error(
+                                                output_config,
+                                                &path_str,
+                                                1,
+                                                1,
+                                                warning_msg,
+                                                "warning"
+                                            )
+                                        );
+                                    }
+                                    return ParseResult::Skipped;
+                                }
+                            }
+
+                            // Re-parse the file if not a skipped file
+                            if verbose {
+                                println!("Cache indicates error - re-parsing file");
+                            }
+                        }
+                    }
+                }
+                Ok(false) => {
+                    if verbose {
+                        println!("File or options changed since last run - re-parsing");
+                    }
+                }
+                Err(e) => {
+                    if verbose {
+                        println!("Cache check failed: {} - parsing file directly", e);
+                    }
+                }
+            }
+        }
+    }
+
+    // Parse the file
     match file_utils::read_file_with_encoding(path) {
         Ok(content) => {
             match parser::parse(&content, verbose) {
@@ -90,6 +179,18 @@ fn parse_file(
                     if output_config.show_success {
                         println!("{}", format_success(output_config, path));
                     }
+
+                    // Update cache
+                    if cache_enabled && path.exists() {
+                        if let Some(cache_obj) = cache {
+                            if let Err(e) = cache_obj.update(path, true, options_hash) {
+                                if verbose {
+                                    println!("Failed to update cache: {}", e);
+                                }
+                            }
+                        }
+                    }
+
                     ParseResult::Success
                 }
                 Err(e) => {
@@ -98,6 +199,17 @@ fn parse_file(
                         // Check if this is a "no ASP tags" error
                         if asp_error.is_no_asp_tags_error() {
                             let path_str = path.display().to_string();
+
+                            // Update cache with skipped status
+                            if cache_enabled && path.exists() {
+                                if let Some(cache_obj) = cache {
+                                    if let Err(e) = cache_obj.update(path, false, options_hash) {
+                                        if verbose {
+                                            println!("Failed to update cache: {}", e);
+                                        }
+                                    }
+                                }
+                            }
 
                             // In strict mode, treat as error
                             if strict_mode {
@@ -143,6 +255,17 @@ fn parse_file(
                     let error_message = e.to_string();
                     let (line, column) = extract_line_and_column(&error_message);
 
+                    // Update cache with error status
+                    if cache_enabled && path.exists() {
+                        if let Some(cache_obj) = cache {
+                            if let Err(e) = cache_obj.update(path, false, options_hash) {
+                                if verbose {
+                                    println!("Failed to update cache: {}", e);
+                                }
+                            }
+                        }
+                    }
+
                     // Get the appropriate severity for this error
                     let severity = map_severity("parse_error");
 
@@ -171,6 +294,18 @@ fn parse_file(
                 "{}",
                 format_error(output_config, &path_str, 1, 1, &error_msg, "error")
             );
+
+            // Update cache with error status
+            if cache_enabled && path.exists() {
+                if let Some(cache_obj) = cache {
+                    if let Err(e) = cache_obj.update(path, false, options_hash) {
+                        if verbose {
+                            println!("Failed to update cache: {}", e);
+                        }
+                    }
+                }
+            }
+
             ParseResult::Error
         }
     }
@@ -413,6 +548,13 @@ fn main() {
                 .short('c')
                 .help("Path to configuration file (TOML format)")
                 .value_name("FILE")
+                .required(false),
+        )
+        .arg(
+            Arg::new("no-cache")
+                .long("no-cache")
+                .help("Disable parsing cache (force reparse of all files)")
+                .action(ArgAction::SetTrue)
                 .required(false),
         );
 
@@ -695,6 +837,54 @@ fn main() {
         println!("Found {} files to parse", files_to_parse.len());
     }
 
+    // Initialize cache if enabled
+    let no_cache_flag = matches.get_flag("no-cache");
+    let cache_enabled = if no_cache_flag {
+        false
+    } else if let Some(cache_str) = args_map.get("cache") {
+        cache_str == "true"
+    } else {
+        true // Enable cache by default
+    };
+    let mut cache = if cache_enabled {
+        // Load existing cache or create a new one
+        let mut cache_obj = Cache::load();
+
+        if verbose {
+            println!("Cache initialized with {} entries", cache_obj.len());
+
+            // Clean old cache entries
+            let cleaned = cache_obj.clean_old_entries();
+            if cleaned > 0 {
+                println!("Removed {} old entries from cache", cleaned);
+            }
+        }
+
+        Some(cache_obj)
+    } else {
+        if verbose {
+            println!("Cache disabled with --no-cache flag");
+        }
+        None
+    };
+
+    // Create a hash of the options that can affect parsing results
+    let mut options_to_hash = Vec::new();
+
+    // Add key options that affect parsing results
+    options_to_hash.push(format!("strict={}", strict_mode));
+
+    if !ignored_warnings.is_empty() {
+        options_to_hash.push(format!("ignore_warnings={}", ignored_warnings.join(",")));
+    }
+
+    // Generate the options hash
+    let options_hash = Cache::hash_options(&options_to_hash);
+
+    if verbose && cache_enabled {
+        println!("Using options hash: {}", options_hash);
+    }
+
     if matches.get_flag("stdin") {
         match parse_stdin_content(verbose, &output_config, strict_mode, &ignored_warnings) {
             ParseResult::Success => success_count += 1,
@@ -709,10 +899,26 @@ fn main() {
                 &output_config,
                 strict_mode,
                 &ignored_warnings,
+                cache_enabled,
+                &mut cache,
+                &options_hash,
             ) {
                 ParseResult::Success => success_count += 1,
                 ParseResult::Skipped => skipped_count += 1,
                 ParseResult::Error => fail_count += 1,
+            }
+        }
+    }
+
+    // Save cache if enabled
+    if cache_enabled {
+        if let Some(ref cache_obj) = cache {
+            if let Err(e) = cache_obj.save() {
+                if verbose {
+                    eprintln!("Failed to save cache: {}", e);
+                }
+            } else if verbose {
+                println!("Cache saved with {} entries", cache_obj.len());
             }
         }
     }
