@@ -98,24 +98,19 @@ jobs:
       run: |
         # Install needed cross-compilation tools
         sudo apt-get update
-        sudo apt-get install -y pkg-config
+        sudo apt-get install -y pkg-config musl-tools
         
         # Install specific dependencies for different targets
         if [[ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]]; then
           sudo apt-get install -y gcc-multilib
         elif [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
           sudo apt-get install -y gcc-aarch64-linux-gnu
-        elif [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
-          sudo apt-get install -y musl-tools
         fi
         
         # For non-musl targets, use cross
         if [[ "${{ matrix.target }}" != "x86_64-unknown-linux-musl" ]]; then
           cargo install cross --locked
           echo "CARGO=cross" >> $GITHUB_ENV
-          
-          # Conservez le Cross.toml existant car il contient déjà des configurations importantes
-          # Il sera utilisé automatiquement
         fi
 
     - name: Set target flags
