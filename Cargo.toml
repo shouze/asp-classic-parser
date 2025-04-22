@@ -18,12 +18,16 @@ flate2 = "1.0"
 tar = "0.4"
 thiserror = "1.0"
 tempfile = "3.8"  # Added tempfile for temporary directory support
+
+# OpenSSL is now conditionally included based on the target platform
+[target.'cfg(not(windows))'.dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"], optional = true }
 
 [features]
 # Enable the vendored feature by default for easier cross-compilation
 default = ["vendored"]
-vendored = ["openssl-sys/vendored", "reqwest/native-tls-vendored"]
+# Modified vendored feature to handle Windows separately
+vendored = ["reqwest/native-tls-vendored"]
 vendored-openssl = ["reqwest/native-tls-vendored"]
 
 # For TTY detection
@@ -32,6 +36,7 @@ libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi"] }
+# On Windows, schannel (Windows native TLS) will be used automatically
 
 [dev-dependencies]
 tempfile = "3.8"
