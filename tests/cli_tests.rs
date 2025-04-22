@@ -1013,3 +1013,51 @@ fn test_cli_cache_functionality() {
         "Cache should detect file changes and re-parse"
     );
 }
+
+/// Test that parallel processing works as expected
+#[test]
+fn test_cli_parallel_processing() {
+    // Create a temporary directory with multiple test files
+    let temp_dir = tempdir().expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    // Create several test files to parse in parallel
+    for i in 1..=10 {
+        let file_path = temp_path.join(format!("parallel_test_{}.asp", i));
+        fs::write(
+            &file_path,
+            format!("<% Response.Write \"Parallel Test {}\" %>", i),
+        )
+        .expect("Failed to write test file");
+    }
+
+    // Run the parser with 4 threads, explicitly disable exclusions to ensure our test files are found
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(temp_path.to_str().unwrap())
+        .arg("--threads=4")
+        .arg("--verbose")
+        .arg("--format=ascii")
+        .arg("--replace-exclude") // Explicitly disable default exclusions
+        .output()
+        .expect("Failed to execute CLI");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    println!("Parallel processing output: {}", stdout);
+
+    // Verify we're using multiple threads
+    assert!(
+        stdout.contains("Using 4 thread(s) for parallel processing"),
+        "Should report using 4 threads"
+    );
+
+    // Check if all files were processed successfully
+    assert!(
+        stdout.contains("Found 10 files to parse"),
+        "Should find all 10 test files"
+    );
+
+    assert!(
+        stdout.contains("Parsing complete: 10 succeeded, 0 failed"),
+        "All files should parse successfully"
+    );
+}

@@ -1,8 +1,10 @@
 use clap::{Arg, ArgAction, Command};
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::io::{self, BufRead, Read};
 use std::path::PathBuf;
 use std::process;
+use std::sync::{Arc, Mutex};
 
 mod cache;
 mod config;
@@ -417,6 +419,288 @@ fn parse_stdin_content(
     }
 }
 
+/// Parse a single file and report results in a thread-safe manner
+///
+/// This function is designed to be used in parallel processing environments,
+/// with shared resources protected by Arc<Mutex<T>>.
+///
+#[allow(clippy::too_many_arguments)]
+fn parse_file_parallel(
+    path: PathBuf,
+    verbose: bool,
+    output_config: Arc<OutputConfig>,
+    strict_mode: bool,
+    ignored_warnings: Arc<Vec<String>>,
+    cache_enabled: bool,
+    cache: Arc<Mutex<Option<Cache>>>,
+    options_hash: String,
+    output_mutex: Arc<Mutex<()>>,
+) -> ParseResult {
+    // Use a mutex to avoid interleaved console output
+    {
+        let _lock = output_mutex
+            .lock()
+            .expect("Failed to acquire output mutex lock. The mutex may be poisoned.");
+        if verbose {
+            println!("Parsing file: {}", path.display());
+        }
+    }
+
+    // Check if file is in cache and the cache is valid
+    if cache_enabled && path.exists() {
+        let cache_check_result = {
+            let cache_guard = cache.lock().unwrap();
+            if let Some(ref cache_obj) = *cache_guard {
+                cache_obj.is_valid(&path, &options_hash)
+            } else {
+                Ok(false)
+            }
+        };
+
+        match cache_check_result {
+            Ok(true) => {
+                // File is in cache and hasn't changed
+                let mut cache_result = None;
+
+                {
+                    let cache_guard = cache.lock().unwrap();
+                    if let Some(ref cache_obj) = *cache_guard {
+                        cache_result = cache_obj.was_successful(&path);
+                    }
+                }
+
+                if let Some(success) = cache_result {
+                    let _lock = output_mutex.lock().unwrap();
+
+                    if verbose {
+                        println!("Using cached result for: {}", path.display());
+                    }
+
+                    if success {
+                        // Show success message if configured to do so
+                        if output_config.show_success {
+                            println!("{}", format_success(&output_config, &path));
+                        }
+                        return ParseResult::Success;
+                    } else {
+                        // Always show the warning/error message
+                        let path_str = path.display().to_string();
+
+                        // Check for skipped files (no-asp-tags)
+                        let cache_skipped = cache_result == Some(false);
+
+                        if !ignored_warnings.contains(&"no-asp-tags".to_string()) && cache_skipped {
+                            let warning_msg = "No ASP tags found in file - skipping";
+
+                            if strict_mode {
+                                eprintln!(
+                                    "{}",
+                                    format_error(
+                                        &output_config,
+                                        &path_str,
+                                        1,
+                                        1,
+                                        "No ASP tags found in file",
+                                        "error"
+                                    )
+                                );
+                                return ParseResult::Error;
+                            } else {
+                                // Show warning only if in verbose mode or not explicitly ignored
+                                if verbose || ignored_warnings.is_empty() {
+                                    eprintln!(
+                                        "{}",
+                                        format_error(
+                                            &output_config,
+                                            &path_str,
+                                            1,
+                                            1,
+                                            warning_msg,
+                                            "warning"
+                                        )
+                                    );
+                                }
+                                return ParseResult::Skipped;
+                            }
+                        }
+
+                        // Re-parse the file if not a skipped file
+                        if verbose {
+                            println!("Cache indicates error - re-parsing file");
+                        }
+                    }
+                }
+            }
+            Ok(false) => {
+                let _lock = output_mutex.lock().unwrap();
+                if verbose {
+                    println!("File or options changed since last run - re-parsing");
+                }
+            }
+            Err(e) => {
+                let _lock = output_mutex.lock().unwrap();
+                if verbose {
+                    println!("Cache check failed: {} - parsing file directly", e);
+                }
+            }
+        }
+    }
+
+    // Parse the file
+    match file_utils::read_file_with_encoding(&path) {
+        Ok(content) => {
+            match parser::parse(&content, verbose) {
+                Ok(_) => {
+                    // Update cache
+                    if cache_enabled && path.exists() {
+                        let mut cache_guard = cache.lock().unwrap();
+                        if let Some(ref mut cache_obj) = *cache_guard {
+                            if let Err(e) = cache_obj.update(&path, true, &options_hash) {
+                                let _lock = output_mutex.lock().unwrap();
+                                if verbose {
+                                    println!("Failed to update cache: {}", e);
+                                }
+                            }
+                        }
+                    }
+
+                    // Show success message if configured to do so
+                    {
+                        let _lock = output_mutex.lock().unwrap();
+                        if output_config.show_success {
+                            println!("{}", format_success(&output_config, &path));
+                        }
+                    }
+
+                    ParseResult::Success
+                }
+                Err(e) => {
+                    // Lock for synchronized output
+                    let _lock = output_mutex.lock().unwrap();
+
+                    // Try to downcast to AspParseError to check for no-asp-tags condition
+                    if let Some(asp_error) = e.downcast_ref::<parser::AspParseError>() {
+                        // Check if this is a "no ASP tags" error
+                        if asp_error.is_no_asp_tags_error() {
+                            let path_str = path.display().to_string();
+
+                            // Update cache with skipped status
+                            if cache_enabled && path.exists() {
+                                let mut cache_guard = cache.lock().unwrap();
+                                if let Some(ref mut cache_obj) = *cache_guard {
+                                    if let Err(e) = cache_obj.update(&path, false, &options_hash) {
+                                        if verbose {
+                                            println!("Failed to update cache: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+
+                            // In strict mode, treat as error
+                            if strict_mode {
+                                let error_msg = "No ASP tags found in file";
+                                eprintln!(
+                                    "{}",
+                                    format_error(
+                                        &output_config,
+                                        &path_str,
+                                        1,
+                                        1,
+                                        error_msg,
+                                        "error"
+                                    )
+                                );
+                                return ParseResult::Error;
+                            }
+
+                            // Otherwise, handle as a warning - unless ignored
+                            if !ignored_warnings.contains(&"no-asp-tags".to_string()) {
+                                // In verbose mode or if not explicitly ignored, show the warning
+                                if verbose || ignored_warnings.is_empty() {
+                                    let warning_msg = "No ASP tags found in file - skipping";
+                                    eprintln!(
+                                        "{}",
+                                        format_error(
+                                            &output_config,
+                                            &path_str,
+                                            1,
+                                            1,
+                                            warning_msg,
+                                            "warning"
+                                        )
+                                    );
+                                }
+                            }
+
+                            return ParseResult::Skipped;
+                        }
+                    }
+
+                    // For other errors, handle as a regular error
+                    let error_message = e.to_string();
+                    let (line, column) = extract_line_and_column(&error_message);
+
+                    // Update cache with error status
+                    if cache_enabled && path.exists() {
+                        let mut cache_guard = cache.lock().unwrap();
+                        if let Some(ref mut cache_obj) = *cache_guard {
+                            if let Err(e) = cache_obj.update(&path, false, &options_hash) {
+                                if verbose {
+                                    println!("Failed to update cache: {}", e);
+                                }
+                            }
+                        }
+                    }
+
+                    // Get the appropriate severity for this error
+                    let severity = map_severity("parse_error");
+
+                    // Format and print the error according to the selected output format
+                    let path_str = path.display().to_string();
+                    eprintln!(
+                        "{}",
+                        format_error(
+                            &output_config,
+                            &path_str,
+                            line,
+                            column,
+                            &error_message,
+                            severity
+                        )
+                    );
+                    ParseResult::Error
+                }
+            }
+        }
+        Err(e) => {
+            // Lock for synchronized output
+            let _lock = output_mutex.lock().unwrap();
+
+            // Format file reading errors using the same format
+            let path_str = path.display().to_string();
+            let error_msg = format!("Cannot read file: {}", e);
+            eprintln!(
+                "{}",
+                format_error(&output_config, &path_str, 1, 1, &error_msg, "error")
+            );
+
+            // Update cache with error status
+            if cache_enabled && path.exists() {
+                let mut cache_guard = cache.lock().unwrap();
+                if let Some(ref mut cache_obj) = *cache_guard {
+                    if let Err(e) = cache_obj.update(&path, false, &options_hash) {
+                        if verbose {
+                            println!("Failed to update cache: {}", e);
+                        }
+                    }
+                }
+            }
+
+            ParseResult::Error
+        }
+    }
+}
+
 fn main() {
     let app = Command::new("ASP Classic Parser")
         .version(env!("CARGO_PKG_VERSION"))
@@ -555,6 +839,15 @@ fn main() {
                 .long("no-cache")
                 .help("Disable parsing cache (force reparse of all files)")
                 .action(ArgAction::SetTrue)
+                .required(false),
+        )
+        .arg(
+            Arg::new("threads")
+                .long("threads")
+                .short('t')
+                .help("Number of threads for parallel processing (default: number of logical CPUs)")
+                .value_name("N")
+                .value_parser(clap::value_parser!(usize))
                 .required(false),
         );
 
@@ -892,20 +1185,87 @@ fn main() {
             ParseResult::Error => fail_count += 1,
         }
     } else {
-        for file_path in files_to_parse {
-            match parse_file(
-                &file_path,
-                verbose,
-                &output_config,
-                strict_mode,
-                &ignored_warnings,
-                cache_enabled,
-                &mut cache,
-                &options_hash,
-            ) {
-                ParseResult::Success => success_count += 1,
-                ParseResult::Skipped => skipped_count += 1,
-                ParseResult::Error => fail_count += 1,
+        // Initialize thread count
+        let thread_count = matches
+            .get_one::<usize>("threads")
+            .copied()
+            .unwrap_or_else(num_cpus::get);
+
+        if verbose {
+            println!("Using {} thread(s) for parallel processing", thread_count);
+        }
+
+        // Process in parallel or sequential mode based on thread count
+        if thread_count > 1 && files_to_parse.len() > 1 {
+            // Parallel processing with rayon
+
+            // Create thread-safe shared resources
+            let output_config_arc = Arc::new(output_config.clone());
+            let ignored_warnings_arc = Arc::new(ignored_warnings.clone());
+            let cache_arc = Arc::new(Mutex::new(cache.take()));
+            let output_mutex = Arc::new(Mutex::new(()));
+
+            // Configure the thread pool with the specified number of threads
+            let thread_pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(thread_count)
+                .build()
+                .unwrap();
+
+            // Process files in parallel using the local thread pool
+            let results: Vec<ParseResult> = thread_pool.install(|| {
+                files_to_parse
+                    .into_par_iter()
+                    .map(|file_path| {
+                        parse_file_parallel(
+                            file_path,
+                            verbose,
+                            output_config_arc.clone(),
+                            strict_mode,
+                            ignored_warnings_arc.clone(),
+                            cache_enabled,
+                            cache_arc.clone(),
+                            options_hash.clone(),
+                            output_mutex.clone(),
+                        )
+                    })
+                    .collect()
+            });
+
+            // Count results
+            for result in results {
+                match result {
+                    ParseResult::Success => success_count += 1,
+                    ParseResult::Skipped => skipped_count += 1,
+                    ParseResult::Error => fail_count += 1,
+                }
+            }
+
+            // Retrieve the final cache state from the Arc<Mutex<>>
+            if cache_enabled {
+                let mut cache_guard = cache_arc.lock().unwrap();
+                cache = cache_guard.take();
+            }
+        } else {
+            // Sequential processing for a single thread or single file
+            if thread_count > 1 && verbose {
+                println!("Only one file to parse, using sequential processing");
+            }
+
+            for file_path in files_to_parse {
+                match parse_file(
+                    &file_path,
+                    verbose,
+                    &output_config,
+                    strict_mode,
+                    &ignored_warnings,
+                    cache_enabled,
+                    &mut cache,
+                    &options_hash,
+                ) {
+                    ParseResult::Success => success_count += 1,
+                    ParseResult::Skipped => skipped_count += 1,
+                    ParseResult::Error => fail_count += 1,
+                }
             }
         }
     }

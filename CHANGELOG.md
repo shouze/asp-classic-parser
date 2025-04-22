@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.13] - 2025-04-23
+
+### Added
+- Parallel file processing with `--threads N` option for improved performance
+- Automatically detects the number of logical CPU cores and uses them by default
+- Configuration option `threads` in TOML files to set default thread count
+- Thread pool management to prevent excessive resource usage
+- Smart fallback to sequential processing for single files
+
 ## [0.1.12] - 2025-04-22
 
 ### Added

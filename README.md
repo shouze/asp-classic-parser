@@ -279,6 +279,38 @@ The cache is stored in your system's cache directory:
 - On macOS: `~/Library/Caches/asp-classic-parser/`
 - On Windows: `%LOCALAPPDATA%\asp-classic-parser\`
 
+### Parallelization Options
+
+The parser supports parallel processing of files to improve performance on multi-core systems:
+
+```bash
+# Use a specific number of threads
+asp-classic-parser directory/ --threads=4
+
+# Let the parser automatically use all available CPU cores (default)
+asp-classic-parser directory/
+
+# Use a single thread (disable parallelization)
+asp-classic-parser directory/ --threads=1
+```
+
+The multi-threading system:
+- Automatically detects the number of logical CPU cores on your system
+- Creates a thread pool sized according to the `--threads` parameter or CPU count
+- Efficiently distributes files across threads for maximum performance
+- Falls back to sequential processing for single files
+- Synchronizes output to prevent interleaved messages
+- Manages shared resources like the parse cache correctly
+- Can be configured in your config file
+
+Example configuration file entry:
+```toml
+# Set default number of threads for parallel processing
+threads = 4
+```
+
+When processing large directories with many files, parallel processing can significantly improve performance.
+
 ### Command Line Options
 
 ```
