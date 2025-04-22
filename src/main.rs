@@ -1,13 +1,16 @@
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::io::{self, BufRead, Read};
 use std::path::PathBuf;
 use std::process;
 
+mod config;
 mod file_utils;
 mod output_format;
 mod parser;
 mod updater;
 
+use config::Config;
 use output_format::{
     OutputConfig, OutputFormat, format_error, format_success, format_summary, map_severity,
 };
@@ -312,6 +315,18 @@ fn main() {
                         .required(false),
                 ),
         )
+        .subcommand(
+            Command::new("init-config")
+                .about("Generate a default configuration file template")
+                .arg(
+                    Arg::new("output")
+                        .short('o')
+                        .long("output")
+                        .value_name("FILE")
+                        .help("Write configuration to specified file instead of stdout")
+                        .required(false),
+                ),
+        )
         .arg(
             Arg::new("files")
                 .help("Files or directories to parse (use '-' for stdin file list)")
@@ -391,6 +406,14 @@ fn main() {
                 .value_delimiter(',')
                 .action(ArgAction::Append)
                 .required(false),
+        )
+        .arg(
+            Arg::new("config")
+                .long("config")
+                .short('c')
+                .help("Path to configuration file (TOML format)")
+                .value_name("FILE")
+                .required(false),
         );
 
     let matches = app.get_matches();
@@ -414,9 +437,125 @@ fn main() {
         }
     }
 
-    // Determine the output format
+    // Handle init-config subcommand
+    if let Some(init_config_matches) = matches.subcommand_matches("init-config") {
+        let config_template = Config::default_with_comments();
+
+        // Check if output file is specified
+        if let Some(output_path) = init_config_matches.get_one::<String>("output") {
+            match std::fs::write(output_path, config_template) {
+                Ok(_) => {
+                    println!("Configuration template written to: {}", output_path);
+                    println!("You can now edit this file and use it with --config option");
+                }
+                Err(e) => {
+                    eprintln!("Error writing configuration file: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            // Print to stdout if no file is specified
+            println!("{}", config_template);
+        }
+
+        std::process::exit(0);
+    }
+
+    // Convert command-line arguments to a HashMap for applying config settings
+    let mut args_map: HashMap<String, String> = HashMap::new();
+
+    // Load configuration files
+    let mut config = Config::default();
+    let config_verbose = matches.get_flag("verbose");
+
+    // Check for explicit config file path
+    if let Some(config_path) = matches.get_one::<String>("config") {
+        let config_file_path = PathBuf::from(config_path);
+        if !config_file_path.exists() {
+            eprintln!(
+                "Warning: Configuration file '{}' does not exist",
+                config_path
+            );
+        } else {
+            match Config::from_file(&config_file_path) {
+                Ok(loaded_config) => {
+                    if config_verbose {
+                        println!("Loaded configuration from {}", config_path);
+                    }
+                    config = loaded_config;
+                }
+                Err(e) => {
+                    eprintln!("Error loading configuration from '{}': {}", config_path, e);
+                }
+            }
+        }
+    } else {
+        // Look for configuration files in the current directory and parents
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let configs = Config::find_configs(&current_dir);
+
+        if !configs.is_empty() && config_verbose {
+            println!("Found {} configuration file(s)", configs.len());
+        }
+
+        // Apply configurations, starting from the most general to most specific
+        for (path, cfg) in configs {
+            if config_verbose {
+                println!("Applying configuration from {}", path.display());
+            }
+            config = cfg.merge(&config);
+        }
+    }
+
+    // Apply the configuration to args_map
+    config.apply_to_args(&mut args_map);
+
+    // Manual conversion of args_map to command line arguments for specific options
+    // Format
     let format = match matches.get_one::<String>("format") {
-        Some(format_str) => match OutputFormat::from_str(format_str) {
+        Some(fmt) => Some(fmt.to_string()),
+        None => args_map.get("format").cloned(),
+    };
+
+    // Color
+    let no_color = if matches.get_flag("no-color") {
+        true
+    } else if let Some(color) = args_map.get("color") {
+        color == "false"
+    } else {
+        false
+    };
+
+    // Verbose
+    let verbose = if matches.get_flag("verbose") {
+        true
+    } else if let Some(verbose_str) = args_map.get("verbose") {
+        verbose_str == "true"
+    } else {
+        false
+    };
+
+    // Quiet success
+    let quiet_success = if matches.get_flag("quiet-success") {
+        true
+    } else if let Some(quiet_str) = args_map.get("quiet-success") {
+        quiet_str == "true"
+    } else {
+        false
+    };
+
+    // Strict mode
+    let strict_mode = if matches.get_flag("strict") {
+        true
+    } else if let Some(strict_str) = args_map.get("strict") {
+        strict_str == "true"
+    } else {
+        false
+    };
+
+    // Determine the output format
+    let format = match format {
+        Some(format_str) => match OutputFormat::from_str(&format_str) {
             Ok(format) => format,
             Err(e) => {
                 eprintln!("Error: {}", e);
@@ -430,13 +569,11 @@ fn main() {
     // Create output configuration
     let output_config = OutputConfig {
         format,
-        use_colors: !matches.get_flag("no-color"),
-        show_success: !matches.get_flag("quiet-success"),
+        use_colors: !no_color,
+        show_success: !quiet_success,
     };
 
     let mut paths_to_parse: Vec<PathBuf> = Vec::new();
-    let verbose = matches.get_flag("verbose");
-    let strict_mode = matches.get_flag("strict");
 
     // Get list of warnings to ignore
     let ignored_warnings: Vec<String> = match matches.get_many::<String>("ignore-warnings") {
@@ -527,11 +664,11 @@ fn main() {
             // If this path looks like a temporary directory and no explicit exclude arguments were given,
             // add the replace-exclude flag to avoid filtering test files
             let path_str = path.to_string_lossy().to_string();
-            if (path_str.contains("/tmp/")
+            if path_str.contains("/tmp/")
                 || path_str.contains("\\Temp\\")
-                || path_str.contains("\\temp\\"))
-                && !matches.contains_id("exclude")
-                && !matches.get_flag("replace-exclude")
+                || path_str.contains("\\temp\\")
+                    && !matches.contains_id("exclude")
+                    && !matches.get_flag("replace-exclude")
             {
                 effective_exclude.push("--replace-exclude".to_string());
                 if verbose {

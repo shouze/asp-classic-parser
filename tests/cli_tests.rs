@@ -694,3 +694,179 @@ fn test_cli_stdin_no_asp_tags() {
         "Summary should show 1 file skipped"
     );
 }
+
+// Test the new configuration file functionality in v0.1.11
+#[test]
+fn test_cli_config_file() {
+    use std::fs::File;
+    use std::io::Write;
+    use std::process::Command;
+
+    // Create a temporary directory with test files
+    let temp_dir = tempdir().expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    // Create a sample ASP file
+    let asp_file_path = temp_path.join("config_test.asp");
+    fs::write(&asp_file_path, "<% Response.Write \"Config test\" %>")
+        .expect("Failed to write config_test.asp");
+
+    // Create an HTML file (no ASP tags - will generate warning if not ignored)
+    let html_file_path = temp_path.join("no_asp_tags.html");
+    fs::write(
+        &html_file_path,
+        "<html><body>No ASP tags here</body></html>",
+    )
+    .expect("Failed to write no_asp_tags.html");
+
+    // Create a configuration file
+    let config_file_path = temp_path.join("asp-parser.toml");
+    let mut config_file = File::create(&config_file_path).expect("Failed to create config file");
+    writeln!(
+        config_file,
+        r#"
+# ASP Parser Configuration
+format = "ascii"       # Use ASCII format
+color = false          # Disable colored output
+verbose = true         # Enable verbose output
+ignore_warnings = ["no-asp-tags"]  # Ignore "no ASP tags" warnings
+"#
+    )
+    .expect("Failed to write config content");
+
+    // Test 1: Use --config to explicitly specify the config file
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(asp_file_path.to_str().unwrap())
+        .arg(html_file_path.to_str().unwrap())
+        .arg("--config")
+        .arg(config_file_path.to_str().unwrap())
+        .output()
+        .expect("Failed to execute CLI with config");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("Config test stdout: {}", stdout);
+    println!("Config test stderr: {}", stderr);
+
+    // Verify verbose output is enabled via config
+    assert!(
+        stdout.contains("Using output format: ascii"),
+        "Should show verbose message about output format"
+    );
+
+    // With the files we're using, we should see both files being processed
+    assert!(
+        stdout.contains("Found 2 files to parse"),
+        "Should show that 2 files were found"
+    );
+
+    // The HTML file should still be skipped even if warning is suppressed
+    assert!(stdout.contains("1 skipped"), "Should report 1 file skipped");
+
+    // Test 2: Auto-discovery of configuration file
+    // Create a new subdirectory
+    let subdir_path = temp_path.join("subdir");
+    fs::create_dir(&subdir_path).expect("Failed to create subdirectory");
+
+    // Create a test file in the subdirectory
+    let subdir_asp_path = subdir_path.join("subdir_test.asp");
+    fs::write(&subdir_asp_path, "<% Response.Write \"Subdir test\" %>")
+        .expect("Failed to write subdir_test.asp");
+
+    // Run the parser from the subdirectory without explicitly specifying config
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(subdir_asp_path.to_str().unwrap())
+        .current_dir(&subdir_path) // Run from the subdirectory
+        .output()
+        .expect("Failed to execute CLI with auto-discovered config");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // The config in the parent directory should be auto-discovered
+    assert!(
+        stdout.contains("Using output format: ascii"),
+        "Auto-discovered config should enable verbose mode: {}",
+        stdout
+    );
+
+    // Test 3: CLI arguments should override config file settings
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(asp_file_path.to_str().unwrap())
+        .arg("--config")
+        .arg(config_file_path.to_str().unwrap())
+        .arg("--no-color") // Already false in config, but this is explicit
+        .arg("--quiet-success") // Not in config, should be applied
+        .output()
+        .expect("Failed to execute CLI with config and overrides");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Should NOT show the success message due to --quiet-success CLI flag overriding config
+    assert!(
+        !stdout.contains(&format!("{} parsed successfully", asp_file_path.display())),
+        "Success message should not be shown with --quiet-success option"
+    );
+}
+
+// Test the init-config functionality
+#[test]
+fn test_cli_init_config() {
+    // Create a temporary directory
+    let temp_dir = tempdir().expect("Failed to create temp directory");
+    let output_path = temp_dir.path().join("test-config.toml");
+
+    // Test 1: Generate config template to a file
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg("init-config")
+        .arg("--output")
+        .arg(output_path.to_str().unwrap())
+        .output()
+        .expect("Failed to execute CLI with init-config");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    println!("Init-config output: {}", stdout);
+
+    // Verify the file was created
+    assert!(
+        output_path.exists(),
+        "Configuration file should have been created"
+    );
+
+    // Verify file contains the expected template content
+    let content = fs::read_to_string(&output_path).expect("Failed to read config file");
+    assert!(
+        content.contains("# ASP Classic Parser Configuration"),
+        "Config file should have the title comment"
+    );
+    assert!(
+        content.contains("# format ="),
+        "Config file should contain format option"
+    );
+    assert!(
+        content.contains("# ignore_warnings ="),
+        "Config file should contain ignore_warnings option"
+    );
+
+    // Test 2: Generate config template to stdout
+    let output = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg("init-config")
+        .output()
+        .expect("Failed to execute CLI with init-config to stdout");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Verify that stdout contains the expected template
+    assert!(
+        stdout.contains("# ASP Classic Parser Configuration"),
+        "stdout should contain the config template"
+    );
+    assert!(
+        stdout.contains("# format ="),
+        "stdout should contain format option"
+    );
+    assert!(
+        stdout.contains("# ignore_warnings ="),
+        "stdout should contain ignore_warnings option"
+    );
+}
