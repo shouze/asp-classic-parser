@@ -47,6 +47,9 @@ pub struct Config {
 
     /// Enable parsing cache
     pub cache: Option<bool>,
+
+    /// Number of threads for parallel processing
+    pub threads: Option<usize>,
 }
 
 impl Config {
@@ -92,6 +95,9 @@ impl Config {
 
 # Enable parsing cache
 # cache = false
+
+# Number of threads for parallel processing
+# threads = 4
 "#
         .to_string()
     }
@@ -160,6 +166,7 @@ impl Config {
             exclude: self.exclude.clone().or_else(|| other.exclude.clone()),
             replace_exclude: self.replace_exclude.or(other.replace_exclude),
             cache: self.cache.or(other.cache),
+            threads: self.threads.or(other.threads),
         }
     }
 
@@ -213,6 +220,11 @@ impl Config {
             let value = if cache { "true" } else { "false" };
             args.entry("cache".to_string()).or_insert(value.to_string());
         }
+
+        if let Some(threads) = self.threads {
+            args.entry("threads".to_string())
+                .or_insert(threads.to_string());
+        }
     }
 }
 
@@ -234,6 +246,7 @@ verbose = true
 strict = true
 ignore_warnings = ["no-asp-tags", "unused-variable"]
 exclude = "node_modules,*.min.js"
+threads = 4
 "#
         )
         .unwrap();
@@ -252,6 +265,7 @@ exclude = "node_modules,*.min.js"
             ])
         );
         assert_eq!(config.exclude, Some("node_modules,*.min.js".to_string()));
+        assert_eq!(config.threads, Some(4));
     }
 
     #[test]
@@ -266,6 +280,7 @@ exclude = "node_modules,*.min.js"
             exclude: None,
             replace_exclude: None,
             cache: None,
+            threads: Some(4),
         };
 
         let config2 = Config {
@@ -278,6 +293,7 @@ exclude = "node_modules,*.min.js"
             exclude: Some("node_modules".to_string()),
             replace_exclude: None,
             cache: Some(true),
+            threads: Some(8),
         };
 
         // config1 takes precedence over config2
@@ -297,6 +313,7 @@ exclude = "node_modules,*.min.js"
 
         assert_eq!(merged.exclude, Some("node_modules".to_string())); // From config2
         assert_eq!(merged.cache, Some(true)); // From config2
+        assert_eq!(merged.threads, Some(4)); // From config1
     }
 
     #[test]
@@ -311,6 +328,7 @@ exclude = "node_modules,*.min.js"
             exclude: None,
             replace_exclude: None,
             cache: Some(true),
+            threads: Some(4),
         };
 
         let mut args = HashMap::new();
@@ -339,6 +357,7 @@ exclude = "node_modules,*.min.js"
 
         // Should be set from config
         assert_eq!(args.get("cache"), Some(&"true".to_string()));
+        assert_eq!(args.get("threads"), Some(&"4".to_string()));
     }
 
     #[test]
@@ -355,5 +374,6 @@ exclude = "node_modules,*.min.js"
         assert!(config_str.contains("# exclude ="));
         assert!(config_str.contains("# replace_exclude ="));
         assert!(config_str.contains("# cache ="));
+        assert!(config_str.contains("# threads ="));
     }
 }
