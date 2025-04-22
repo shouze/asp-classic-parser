@@ -203,6 +203,54 @@ The parser maps different types of issues to three severity levels:
 | style_issue | notice | Formatting and style guidance |
 | performance_tip | notice | Performance optimization suggestions |
 
+### Configuration Options
+
+You can use configuration files to set default options for the parser, eliminating the need to specify them on the command line each time. The parser supports hierarchical configuration:
+
+```bash
+# Use an explicit configuration file
+asp-classic-parser --config path/to/asp-parser.toml path/to/file.asp
+
+# Generate a configuration template
+asp-classic-parser init-config > asp-parser.toml
+
+# Or write directly to a file
+asp-classic-parser init-config --output .asp-parser.toml
+```
+
+Configuration files can be placed:
+- In the current directory as `asp-parser.toml` or `.asp-parser.toml` (hidden file)
+- In any parent directory (with closer files taking precedence)
+
+The parser automatically searches for these configuration files and applies them in a hierarchical manner, with command-line options always taking precedence over configuration values.
+
+Example configuration file:
+```toml
+# Output format: "ascii", "ci", "json"
+format = "ascii"
+
+# Enable or disable colored output
+color = true
+
+# Enable verbose output
+verbose = false
+
+# Hide success messages 
+quiet_success = false
+
+# Treat warnings as errors
+strict = false
+
+# List of warnings to ignore
+ignore_warnings = ["no-asp-tags"]
+
+# Additional patterns to exclude
+exclude = "backup/**,*.tmp"
+
+# Replace default exclusions
+replace_exclude = false
+```
+
 ### Command Line Options
 
 ```

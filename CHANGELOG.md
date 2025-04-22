@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2025-04-22
+
+### Added
+- Support for TOML configuration files with hierarchical discovery
+- Added `--config` / `-c` option to explicitly specify a configuration file
+- Automatic discovery of configuration files (asp-parser.toml or .asp-parser.toml) in the current directory and its parents
+- New `init-config` subcommand to generate a default configuration template
+- Support for writing the template to a file with `init-config --output FILE`
+- Comprehensive documentation of all available configuration options
+- Integration tests for configuration functionality
+
+### Changed
+- Refactored code to better separate configuration logic
+- Command-line arguments maintain priority over configuration file values
+- Enhanced user experience with helpful messages when working with configuration files
+
 ## [0.1.10] - 2025-04-19
 
 ### Added
