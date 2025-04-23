@@ -36,7 +36,79 @@
 - Ship a Language Server Protocol (LSP) server that uses the parser for real‑time diagnostics in editors (VS Code, Neovim, etc.).
 
 # 0.1.15
-- Extend the release workflow to publish signed, SBOM‑attached binaries for all targets listed in the GitHub Actions matrix.
+- Fix a behavior where errors detected in some files are not detected after the files have been added in parsed files cache.
+- Add a warning for empty files and enrich the related --ignore-warnings list
 
 # 0.1.16
-- Add a warning for empty files
+
+Imrpvove ascii (default) output format for a command-line parser (UTF-8, ANSI colors). Take inspiration from state-of-the-art tools like rustc, eslint, deno lint, or ruff. Prioritize developer experience and terminal readability.
+
+Requirements:
+- Color scheme must ensure strong contrast and readability on both light and dark backgrounds:
+- ✅ Success → bright green
+- ⚠️ Warning → bright yellow, prefixed with warning
+- ❌ Error → bright red, prefixed with error
+- Skipped/Ignored files → gray or dimmed blue
+- Structure:
+  - Display file:line:column: level: message
+  - Show relevant code snippet with aligned caret (^) and underline (~) to pinpoint the issue
+  - Indent code block and annotate clearly (inspired by rustc)
+  - Include helpful notes when relevant (expected token, hint, etc.)
+  - Final summary at the bottom:
+  - Count of passed, failed, skipped
+  - Colored and aligned for easy scanning
+  - Prefixed with ✨ for visibility and tone
+  - Accessibility: never rely on color alone — messages should be readable without colors (--no-color option)
+
+Example format:
+
+fixtures/failing/invalid_syntax.asp:18:25: error: expected asp_close_tag
+ |
+18 | <%==incomplete expression
+   |                         ^ expected asp_close_tag
+
+✨ Parsing complete: 2 succeeded, 1 failed, 1 skipped
+
+Souhaite-tu une version markdown prérendue ou utilisable directement dans un fichier README.md ?
+
+# 0.2.0
+- Implement Stage 2: Variable Declarations as described in prompt.md file
+
+# 0.3.0
+- Implement Stage 3: Control Structures as described into prompt.md file
+
+# 0.4.0
+- Implement Stage 4: Procedures and Functions as described into prompt.md file
+  
+# 0.5.0
+- Implement Stage 5: Built-in Functions as described into prompt.md file
+
+# 0.6.0
+- Implement Stage 5: Built-in Functions as described into prompt.md file
+- 
+# 0.7.0
+- Implement Stage 6: ASP Objects as described into prompt.md file
+
+# 0.8.0
+- Implement Stage 6: ASP Objects as described into prompt.md file
+
+# 0.9.0
+- Implement Stage 7: File Inclusions as described into prompt.md file
+
+# 0.10.0
+- Implement Stage 8: global.asa File as described into prompt.md file
+
+# 0.11.0
+- Implement Stage 9: Error Handling as described into prompt.md file
+
+# 0.12.0
+- Implement Stage 10: Database Access (ADO) as described into prompt.md file
+
+# 0.13.0
+- Implement Stage 11: File Manipulation as described into prompt.md file
+
+# 0.14.0
+- Implement Stage 12: Advanced / Miscellaneous Functions as described into prompt.md file
+
+# 0.15.0
+- Extend the release workflow to publish signed, SBOM‑attached binaries for all targets listed in the GitHub Actions matrix.

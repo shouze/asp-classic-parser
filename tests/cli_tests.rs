@@ -1070,3 +1070,79 @@ fn test_cli_parallel_processing() {
         "All files should parse successfully"
     );
 }
+
+/// Test that error messages are properly retrieved from cache
+#[test]
+fn test_cache_preserves_errors() {
+    // Create a temp directory for our test
+    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_path = temp_dir.path();
+
+    // Create a test file with invalid syntax in the temp directory
+    let test_file_path = temp_path.join("invalid_syntax.asp");
+    std::fs::write(&test_file_path, "<%=incomplete expression").unwrap();
+
+    // Create a cache directory for this test
+    let cache_dir = temp_path.join("cache");
+    std::fs::create_dir(&cache_dir).unwrap();
+
+    // Set the cache directory for this test only
+    let original_cache_dir = std::env::var("ASP_PARSER_CACHE_DIR").ok();
+    unsafe {
+        std::env::set_var("ASP_PARSER_CACHE_DIR", cache_dir.to_str().unwrap());
+    }
+
+    // First run - this should generate a cache entry with the error
+    let output1 = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(test_file_path.to_str().unwrap())
+        .output()
+        .expect("Failed to execute parser");
+
+    let stderr1 = String::from_utf8_lossy(&output1.stderr).to_string();
+
+    // Verify the first run detected an error
+    assert!(
+        stderr1.contains("error"),
+        "First run should detect a parse error"
+    );
+    assert!(
+        stderr1.contains("incomplete expression"),
+        "First run should include the error details"
+    );
+
+    // Second run - using the cache, should still show the error
+    let output2 = Command::new(env!("CARGO_BIN_EXE_asp-classic-parser"))
+        .arg(test_file_path.to_str().unwrap())
+        .output()
+        .expect("Failed to execute parser");
+
+    let stderr2 = String::from_utf8_lossy(&output2.stderr).to_string();
+
+    // Verify the second run still shows the error from cache
+    assert!(
+        stderr2.contains("error"),
+        "Second run should still show the error from cache"
+    );
+    assert!(
+        stderr2.contains("incomplete expression"),
+        "Second run should include the error details from cache"
+    );
+
+    // Check that we're actually using the cache on the second run
+    let cache_file = cache_dir.join("parse_cache.json");
+    assert!(
+        cache_file.exists(),
+        "Cache file should exist after first run"
+    );
+
+    // Clean up
+    if let Some(dir) = original_cache_dir {
+        unsafe {
+            std::env::set_var("ASP_PARSER_CACHE_DIR", dir);
+        }
+    } else {
+        unsafe {
+            std::env::remove_var("ASP_PARSER_CACHE_DIR");
+        }
+    }
+}

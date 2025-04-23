@@ -113,11 +113,31 @@ fn parse_file(
                             let path_str = path.display().to_string();
 
                             // Check for skipped files (no-asp-tags)
-                            let cache_skipped = cache_obj.was_successful(path) == Some(false);
+                            let cache_error_message = cache_obj.get_error_message(path);
+                            let is_parse_error = cache_error_message.is_some();
 
-                            if !ignored_warnings.contains(&"no-asp-tags".to_string())
-                                && cache_skipped
-                            {
+                            if is_parse_error {
+                                // If we have a real parse error stored in cache, display it
+                                let error_message = cache_error_message.unwrap();
+                                let (line, column) = extract_line_and_column(&error_message);
+
+                                // Get the appropriate severity for this error
+                                let severity = map_severity("parse_error");
+
+                                // Format and print the error according to the selected output format
+                                eprintln!(
+                                    "{}",
+                                    format_error(
+                                        output_config,
+                                        &path_str,
+                                        line,
+                                        column,
+                                        &error_message,
+                                        severity
+                                    )
+                                );
+                                return ParseResult::Error;
+                            } else if !ignored_warnings.contains(&"no-asp-tags".to_string()) {
                                 let warning_msg = "No ASP tags found in file - skipping";
 
                                 if strict_mode {
@@ -197,7 +217,7 @@ fn parse_file(
                     ParseResult::Success
                 }
                 Err(e) => {
-                    // Try to downcast to AspParseError to check for no-asp-tags condition
+                    // Try to downcast to AspParseError to check for special conditions
                     if let Some(asp_error) = e.downcast_ref::<parser::AspParseError>() {
                         // Check if this is a "no ASP tags" error
                         if asp_error.is_no_asp_tags_error() {
@@ -252,18 +272,77 @@ fn parse_file(
 
                             return ParseResult::Skipped;
                         }
+                        // Check if this is an "empty file" error
+                        else if asp_error.is_empty_file_error() {
+                            let path_str = path.display().to_string();
+
+                            // Update cache with skipped status
+                            if cache_enabled && path.exists() {
+                                if let Some(cache_obj) = cache {
+                                    if let Err(e) = cache_obj.update(path, false, options_hash) {
+                                        if verbose {
+                                            println!("Failed to update cache: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+
+                            // In strict mode, treat as error
+                            if strict_mode {
+                                let error_msg = "File is empty or contains only whitespace";
+                                eprintln!(
+                                    "{}",
+                                    format_error(
+                                        output_config,
+                                        &path_str,
+                                        1,
+                                        1,
+                                        error_msg,
+                                        "error"
+                                    )
+                                );
+                                return ParseResult::Error;
+                            }
+
+                            // Otherwise, handle as a warning - unless ignored
+                            if !ignored_warnings.contains(&"empty-file".to_string()) {
+                                // In verbose mode or if not explicitly ignored, show the warning
+                                if verbose || ignored_warnings.is_empty() {
+                                    let warning_msg =
+                                        "File is empty or contains only whitespace - skipping";
+                                    eprintln!(
+                                        "{}",
+                                        format_error(
+                                            output_config,
+                                            &path_str,
+                                            1,
+                                            1,
+                                            warning_msg,
+                                            "warning"
+                                        )
+                                    );
+                                }
+                            }
+
+                            return ParseResult::Skipped;
+                        }
                     }
 
                     // For other errors, handle as a regular error
                     let error_message = e.to_string();
                     let (line, column) = extract_line_and_column(&error_message);
 
-                    // Update cache with error status
+                    // Update cache with error status and message
                     if cache_enabled && path.exists() {
                         if let Some(cache_obj) = cache {
-                            if let Err(e) = cache_obj.update(path, false, options_hash) {
+                            if let Err(e) = cache_obj.update_with_error(
+                                path,
+                                false,
+                                options_hash,
+                                Some(error_message.clone()),
+                            ) {
                                 if verbose {
-                                    println!("Failed to update cache: {}", e);
+                                    println!("Failed to update cache with error: {}", e);
                                 }
                             }
                         }
@@ -367,6 +446,40 @@ fn parse_stdin_content(
                                 // In verbose mode or if not explicitly ignored, show the warning
                                 if verbose || ignored_warnings.is_empty() {
                                     let warning_msg = "No ASP tags found in input - skipping";
+                                    eprintln!(
+                                        "{}",
+                                        format_error(
+                                            output_config,
+                                            path_str,
+                                            1,
+                                            1,
+                                            warning_msg,
+                                            "warning"
+                                        )
+                                    );
+                                }
+                            }
+
+                            return ParseResult::Skipped;
+                        }
+                        // Check if this is an "empty file" error
+                        else if asp_error.is_empty_file_error() {
+                            // In strict mode, treat as error
+                            if strict_mode {
+                                let error_msg = "Input is empty or contains only whitespace";
+                                eprintln!(
+                                    "{}",
+                                    format_error(output_config, path_str, 1, 1, error_msg, "error")
+                                );
+                                return ParseResult::Error;
+                            }
+
+                            // Otherwise, handle as a warning - unless ignored
+                            if !ignored_warnings.contains(&"empty-file".to_string()) {
+                                // In verbose mode or if not explicitly ignored, show the warning
+                                if verbose || ignored_warnings.is_empty() {
+                                    let warning_msg =
+                                        "Input is empty or contains only whitespace - skipping";
                                     eprintln!(
                                         "{}",
                                         format_error(
@@ -487,10 +600,39 @@ fn parse_file_parallel(
                         // Always show the warning/error message
                         let path_str = path.display().to_string();
 
-                        // Check for skipped files (no-asp-tags)
-                        let cache_skipped = cache_result == Some(false);
+                        // Check for skipped files (no-asp-tags) or parse errors
+                        let mut cache_error_message = None;
+                        {
+                            let cache_guard = cache.lock().unwrap();
+                            if let Some(ref cache_obj) = *cache_guard {
+                                cache_error_message = cache_obj.get_error_message(&path);
+                            }
+                        }
 
-                        if !ignored_warnings.contains(&"no-asp-tags".to_string()) && cache_skipped {
+                        let is_parse_error = cache_error_message.is_some();
+
+                        if is_parse_error {
+                            // If we have a real parse error stored in cache, display it
+                            let error_message = cache_error_message.unwrap();
+                            let (line, column) = extract_line_and_column(&error_message);
+
+                            // Get the appropriate severity for this error
+                            let severity = map_severity("parse_error");
+
+                            // Format and print the error according to the selected output format
+                            eprintln!(
+                                "{}",
+                                format_error(
+                                    &output_config,
+                                    &path_str,
+                                    line,
+                                    column,
+                                    &error_message,
+                                    severity
+                                )
+                            );
+                            return ParseResult::Error;
+                        } else if !ignored_warnings.contains(&"no-asp-tags".to_string()) {
                             let warning_msg = "No ASP tags found in file - skipping";
 
                             if strict_mode {
@@ -579,7 +721,7 @@ fn parse_file_parallel(
                     // Lock for synchronized output
                     let _lock = output_mutex.lock().unwrap();
 
-                    // Try to downcast to AspParseError to check for no-asp-tags condition
+                    // Try to downcast to AspParseError to check for special conditions
                     if let Some(asp_error) = e.downcast_ref::<parser::AspParseError>() {
                         // Check if this is a "no ASP tags" error
                         if asp_error.is_no_asp_tags_error() {
@@ -635,19 +777,79 @@ fn parse_file_parallel(
 
                             return ParseResult::Skipped;
                         }
+                        // Check if this is an "empty file" error
+                        else if asp_error.is_empty_file_error() {
+                            let path_str = path.display().to_string();
+
+                            // Update cache with skipped status
+                            if cache_enabled && path.exists() {
+                                let mut cache_guard = cache.lock().unwrap();
+                                if let Some(ref mut cache_obj) = *cache_guard {
+                                    if let Err(e) = cache_obj.update(&path, false, &options_hash) {
+                                        if verbose {
+                                            println!("Failed to update cache: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+
+                            // In strict mode, treat as error
+                            if strict_mode {
+                                let error_msg = "File is empty or contains only whitespace";
+                                eprintln!(
+                                    "{}",
+                                    format_error(
+                                        &output_config,
+                                        &path_str,
+                                        1,
+                                        1,
+                                        error_msg,
+                                        "error"
+                                    )
+                                );
+                                return ParseResult::Error;
+                            }
+
+                            // Otherwise, handle as a warning - unless ignored
+                            if !ignored_warnings.contains(&"empty-file".to_string()) {
+                                // In verbose mode or if not explicitly ignored, show the warning
+                                if verbose || ignored_warnings.is_empty() {
+                                    let warning_msg =
+                                        "File is empty or contains only whitespace - skipping";
+                                    eprintln!(
+                                        "{}",
+                                        format_error(
+                                            &output_config,
+                                            &path_str,
+                                            1,
+                                            1,
+                                            warning_msg,
+                                            "warning"
+                                        )
+                                    );
+                                }
+                            }
+
+                            return ParseResult::Skipped;
+                        }
                     }
 
                     // For other errors, handle as a regular error
                     let error_message = e.to_string();
                     let (line, column) = extract_line_and_column(&error_message);
 
-                    // Update cache with error status
+                    // Update cache with error status and message
                     if cache_enabled && path.exists() {
                         let mut cache_guard = cache.lock().unwrap();
                         if let Some(ref mut cache_obj) = *cache_guard {
-                            if let Err(e) = cache_obj.update(&path, false, &options_hash) {
+                            if let Err(e) = cache_obj.update_with_error(
+                                &path,
+                                false,
+                                &options_hash,
+                                Some(error_message.clone()),
+                            ) {
                                 if verbose {
-                                    println!("Failed to update cache: {}", e);
+                                    println!("Failed to update cache with error: {}", e);
                                 }
                             }
                         }
