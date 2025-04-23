@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, Read};
 use std::path::PathBuf;
 use std::process;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 mod cache;
