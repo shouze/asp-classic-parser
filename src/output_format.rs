@@ -268,7 +268,11 @@ pub fn map_severity(error_code: &str) -> &'static str {
         "parse_error" | "syntax_error" | "encoding_error" | "io_error" => "error",
 
         // Warnings for potential issues
-        "deprecated_feature" | "potential_bug" | "compatibility_issue" | "no-asp-tags" => "warning",
+        "deprecated_feature"
+        | "potential_bug"
+        | "compatibility_issue"
+        | "no-asp-tags"
+        | "empty-file" => "warning",
 
         // Notices for style and best practices
         "best_practice" | "style_issue" | "performance_tip" => "notice",

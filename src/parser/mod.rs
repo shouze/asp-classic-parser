@@ -13,6 +13,8 @@ use std::fmt;
 pub enum AspErrorKind {
     /// No ASP tags were found in the file
     NoAspTags,
+    /// File is empty (contains no content)
+    EmptyFile,
     /// Syntax error or other parsing issue
     ParseError,
 }
@@ -30,6 +32,11 @@ impl AspParseError {
     /// Returns true if this error represents a file with no ASP tags
     pub fn is_no_asp_tags_error(&self) -> bool {
         self.kind == AspErrorKind::NoAspTags
+    }
+
+    /// Returns true if this error represents an empty file
+    pub fn is_empty_file_error(&self) -> bool {
+        self.kind == AspErrorKind::EmptyFile
     }
 }
 
@@ -81,6 +88,16 @@ pub struct AspParser;
 /// }
 /// ```
 pub fn parse(input: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
+    // Check if the file is empty or contains only whitespace
+    if input.trim().is_empty() {
+        return Err(Box::new(AspParseError {
+            message: "File is empty or contains only whitespace".to_string(),
+            line: None,
+            column: None,
+            kind: AspErrorKind::EmptyFile,
+        }));
+    }
+
     // Parse the input with the file rule
     match AspParser::parse(Rule::file, input) {
         Ok(pairs) => {

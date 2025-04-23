@@ -197,6 +197,8 @@ The parser maps different types of issues to three severity levels:
 | syntax_error | error | Valid parse but invalid language syntax |
 | encoding_error | error | File encoding issues |
 | io_error | error | File reading/writing problems |
+| no-asp-tags | warning | File contains no ASP tags (<%...%>) |
+| empty-file | warning | File is empty or contains only whitespace |
 | deprecated_feature | warning | Use of deprecated VBScript features |
 | potential_bug | warning | Code patterns likely to cause runtime issues |
 | compatibility_issue | warning | Features with cross-browser compatibility problems |
@@ -243,7 +245,7 @@ quiet_success = false
 strict = false
 
 # List of warnings to ignore
-ignore_warnings = ["no-asp-tags"]
+ignore_warnings = ["no-asp-tags", "empty-file"]
 
 # Additional patterns to exclude
 exclude = "backup/**,*.tmp"

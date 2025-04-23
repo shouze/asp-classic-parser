@@ -84,8 +84,8 @@ impl Config {
 # Treat warnings as errors (e.g., files with no ASP tags)
 # strict = false
 
-# List of warnings to ignore (e.g., no-asp-tags)
-# ignore_warnings = ["no-asp-tags"]
+# List of warnings to ignore (e.g., no-asp-tags, empty-file)
+# ignore_warnings = ["no-asp-tags", "empty-file"]
 
 # Comma-separated list of glob patterns to exclude (extends default exclusions)
 # exclude = "backup/**,*.tmp"

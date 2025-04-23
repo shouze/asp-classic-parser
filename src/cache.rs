@@ -47,6 +47,9 @@ pub struct CacheEntry {
 
     /// Options hash used for parsing (to invalidate when options change)
     pub options_hash: String,
+
+    /// Error message if parsing failed
+    pub error_message: Option<String>,
 }
 
 /// Cache for parsed files
@@ -182,6 +185,17 @@ impl Cache {
 
     /// Add or update a file in the cache
     pub fn update(&mut self, path: &Path, success: bool, options_hash: &str) -> CacheResult<()> {
+        self.update_with_error(path, success, options_hash, None)
+    }
+
+    /// Add or update a file in the cache with error information
+    pub fn update_with_error(
+        &mut self,
+        path: &Path,
+        success: bool,
+        options_hash: &str,
+        error_message: Option<String>,
+    ) -> CacheResult<()> {
         let path_str = path.to_string_lossy().to_string();
         let content_hash = Self::hash_file(path)?;
 
@@ -191,11 +205,20 @@ impl Cache {
             timestamp: SystemTime::now(),
             success,
             options_hash: options_hash.to_string(),
+            error_message,
         };
 
         self.entries.insert(path_str, entry);
         self.last_modified = SystemTime::now();
         Ok(())
+    }
+
+    /// Get the error message for a file if it exists
+    pub fn get_error_message(&self, path: &Path) -> Option<String> {
+        let path_str = path.to_string_lossy().to_string();
+        self.entries
+            .get(&path_str)
+            .and_then(|entry| entry.error_message.clone())
     }
 
     /// Check if a file was successfully parsed according to the cache
@@ -339,6 +362,31 @@ mod tests {
         // Test with a file not in the cache
         let not_in_cache = NamedTempFile::new().unwrap();
         assert_eq!(cache.was_successful(not_in_cache.path()), None);
+    }
+
+    #[test]
+    fn test_error_message() {
+        let mut cache = Cache::new();
+        let options_hash = "test_hash";
+
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "Test file with error").unwrap();
+
+        let error_msg = "Parse error at line 5".to_string();
+        cache
+            .update_with_error(file.path(), false, options_hash, Some(error_msg.clone()))
+            .unwrap();
+
+        assert_eq!(cache.get_error_message(file.path()), Some(error_msg));
+
+        // Successful file should have no error message
+        let mut success_file = NamedTempFile::new().unwrap();
+        writeln!(success_file, "Success file").unwrap();
+        cache
+            .update(success_file.path(), true, options_hash)
+            .unwrap();
+
+        assert_eq!(cache.get_error_message(success_file.path()), None);
     }
 
     #[test]

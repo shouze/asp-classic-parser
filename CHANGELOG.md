@@ -7,6 +7,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15] - 2025-04-23
+
+### Added
+- Added warning for empty files with `empty-file` warning type
+- Enhanced `--ignore-warnings` list to include `empty-file` option
+- Improved cache reliability by ensuring errors are properly preserved and detected after files have been cached
+
+### Fixed
+- Fixed a bug where errors in some files were not being detected after the files had been added to the parsed files cache
+- Ensured error messages are correctly preserved and retrieved from cache
+- Improved error handling for edge cases including empty files
+
 ## [0.1.14] - 2025-04-23
 
 ### Added
