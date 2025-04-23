@@ -3,7 +3,7 @@
 ' that should fail to parse
 
 ' Unclosed ASP tag (missing %>)
-<% 
+<%
 
 ' Mismatched quotes in string
 Response.Write "Hello, World!

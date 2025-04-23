@@ -4,6 +4,7 @@ use std::env;
 use std::fmt;
 use std::io::{self, IsTerminal};
 use std::path::Path;
+use std::str::FromStr;
 
 /// Available output formats for parsing errors
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -44,18 +45,21 @@ impl OutputConfig {
     }
 }
 
-impl OutputFormat {
-    /// Parse a format from a string
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl FromStr for OutputFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "ascii" => Ok(OutputFormat::Ascii),
             "ci" => Ok(OutputFormat::Ci),
             "json" => Ok(OutputFormat::Json),
-            "auto" => Ok(Self::detect_format()),
+            "auto" => Ok(OutputFormat::detect_format()),
             _ => Err(format!("Unknown output format: {}", s)),
         }
     }
+}
 
+impl OutputFormat {
     /// Detect the best output format based on environment
     pub fn detect_format() -> Self {
         // Use CI format in CI environments

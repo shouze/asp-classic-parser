@@ -16,6 +16,7 @@ This parser provides comprehensive coverage of ASP Classic syntax including:
 - Verbose mode for detailed output during parsing
 - Multiple output formats for integration with CI systems or machine processing
 - Self-update capability to easily upgrade to the latest version
+- Language Server Protocol (LSP) support for integration with VS Code, Neovim, and other LSP-compatible editors
 
 ## Installation
 
@@ -342,6 +343,71 @@ The following patterns are excluded by default:
 - Build artifacts: `node_modules/**`, `vendor/**`, `dist/**`, `build/**`, `target/**`
 - Package managers: `bower_components/**`, `jspm_packages/**`
 - Other common directories: `coverage/**`, `logs/**`, `tmp/**`, `temp/**`
+
+## Language Server Protocol (LSP) Support
+
+ASP Classic Parser now includes a Language Server Protocol implementation that provides real-time diagnostics and code intelligence in compatible editors.
+
+### Using with VS Code
+
+1. Install the "ASP Classic Language Support" extension from the VS Code marketplace
+2. The extension will automatically use the LSP server if it's installed
+
+Alternatively, you can configure VS Code to use a custom LSP server:
+
+1. Install ASP Classic Parser globally or in your project
+2. Add this configuration to your `.vscode/settings.json`:
+
+```json
+{
+    "languageServer": {
+        "asp-classic": {
+            "command": "asp-classic-lsp",
+            "filetypes": ["asp"]
+        }
+    }
+}
+```
+
+### Using with Neovim
+
+For Neovim with built-in LSP support:
+
+```lua
+-- In your Neovim configuration
+require('lspconfig').asp_classic.setup {
+    cmd = { "asp-classic-lsp" },
+    filetypes = { "asp" },
+    root_dir = function(fname)
+        return vim.fn.getcwd()
+    end,
+}
+```
+
+### LSP Features
+
+The ASP Classic LSP server provides:
+
+- Real-time syntax error detection
+- Hover information for ASP/VBScript objects and keywords
+- Code completion for common ASP objects and methods
+- Document symbols for functions, classes, and variables
+- Smart detection of code inside ASP tags
+
+### Running the LSP Server Manually
+
+You can start the LSP server manually for custom integrations:
+
+```bash
+# Start using standard I/O communication (default)
+asp-classic-lsp
+
+# Start using TCP on a specific port
+ASP_LSP_PORT=7777 asp-classic-lsp
+
+# Enable debug logging
+RUST_LOG=debug asp-classic-lsp
+```
 
 ## Development Status
 

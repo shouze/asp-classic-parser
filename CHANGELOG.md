@@ -1,9 +1,26 @@
+# ASP Classic Parser Changelog
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.1.14] - 2025-04-23
+
+### Added
+- Language Server Protocol (LSP) implementation for real-time diagnostics in editors
+- New binary `asp-classic-lsp` for standalone LSP server functionality
+- Support for LSP features including:
+  - Real-time error diagnostics with line/column information
+  - Hover information for ASP/VBScript objects and keywords
+  - Code completion for common ASP objects and methods
+  - Document symbols for navigation (functions, classes, variables)
+  - Smart detection of code inside ASP tags
+- Multiple connection options (stdio and TCP) for editor integration
+- Caching of diagnostics to improve performance in large files
+- Detailed documentation for VS Code and Neovim integration
 
 ## [0.1.13] - 2025-04-23
 

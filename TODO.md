@@ -37,3 +37,6 @@
 
 # 0.1.15
 - Extend the release workflow to publish signed, SBOM‑attached binaries for all targets listed in the GitHub Actions matrix.
+
+# 0.1.16
+- Add a warning for empty files

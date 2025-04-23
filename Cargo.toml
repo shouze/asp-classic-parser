@@ -1,6 +1,6 @@
 [package]
 name = "asp-classic-parser"
-version = "0.1.13"
+version = "0.1.14"
 edition = "2024"
 
 [dependencies]
@@ -25,6 +25,15 @@ tempfile = "3.8"  # Added tempfile for temporary directory support
 rayon = "1.8"
 sys-info = "0.9"
 num_cpus = "1.16"
+# Added for LSP server functionality
+tower-lsp = "0.19"
+tokio = { version = "1.32", features = ["full"] }
+dashmap = "5.5"
+async-trait = "0.1"
+log = "0.4"
+env_logger = "0.10"
+futures = "0.3"
+regex = "1.10"
 
 # OpenSSL is now conditionally included based on the target platform
 [target.'cfg(not(windows))'.dependencies]
@@ -55,3 +64,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "asp-classic-parser"
 path = "src/main.rs"
+
+[[bin]]
+name = "asp-classic-lsp"
+path = "src/bin/lsp.rs"
+
+[lints.rust]
+deprecated = "allow"
