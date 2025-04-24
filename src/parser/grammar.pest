@@ -23,6 +23,39 @@ line_continuation = _{ "_" ~ WHITESPACE* ~ "\r"? ~ "\n" }
 // String literal with proper quote matching
 string_literal = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" | "'" ~ (!("'") ~ ANY)* ~ "'" }
 
+// Dates literal between hash (with hour)
+date_literal_with_hour = { "#" ~ (date_ymd | date_mdy | date_dmy) ~ " " ~ (time_24h | time_12h) ~ "#" }
+
+// Dates literal between hash (without hour)
+date_literal_without_hour = { "#" ~ (date_ymd | date_mdy | date_dmy) ~ "#" }
+
+// Date literal (YMD - depends on the system locale. ex. LCID 1033)
+date_ymd = { year ~ "/" ~ month ~ "/" ~ day }
+
+// Date literal (MDY - depends on the system locale. ex. LCID 1033)
+date_mdy = { month ~ "/" ~ day ~ "/" ~ year }
+
+// Date literal (DMY - depends on the system locale. ex. LCID 1033)
+date_dmy = { day ~ "/" ~ month ~ "/" ~ year }
+
+// Date parts
+year = { ASCII_DIGIT{4} }
+month = { "0"["1".."9"] | "1"["0".."2"] }
+day = { "0"["1".."9"] | "1"[ASCII_DIGIT] | "2"[ASCII_DIGIT] | "3"["0".."1"] }
+
+// Time literal (HMS 24h-format - depends on the system locale. ex. LCID 1033)
+time_24h = { hour_24 ~ ":" ~ minute ~ ":" ~ second }
+
+// Time literal (HMS AM|PM 12h-format - depends on the system locale. ex. LCID 1033)
+time_12h = { hour_12 ~ ":" ~ minute ~ ":" ~ second ~ " " ~ ampm }
+
+// Time parts
+hour_12 = { "0"?["1".."9"] | "1"["0".."2"] }
+hour_24 = { "0"["0".."9"] | "1"["0".."9"] | "2"["0".."3"] }
+minute = { ["0".."5"] ~ ASCII_DIGIT }
+second = { ["0".."5"] ~ ASCII_DIGIT }
+ampm = { ("A" | "a") ~ ("M" | "m") | ("P" | "p") ~ ("M" | "m") }
+
 // Variable reference
 variable = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
